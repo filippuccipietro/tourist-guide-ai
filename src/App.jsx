@@ -674,4 +674,204 @@ Restituisci SOLO questo JSON:
               {/* Stop card */}
               <div style={{
                 background:C.surface,
-                border:`2px solid ${isOpen ? C.accen
+                border:`2px solid ${isOpen ? C.accent : C.border}`,
+                borderRadius:16, marginBottom:8, overflow:"hidden",
+                boxShadow: isOpen ? `0 4px 18px ${C.accent}28` : "0 2px 8px rgba(27,42,74,0.07)",
+                transition:"border-color 0.2s, box-shadow 0.2s",
+              }}>
+                <div onClick={()=>toggleStop(stop)} style={{padding:"16px 18px",display:"flex",alignItems:"center",gap:14,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                  <div style={{
+                    width:36,height:36,borderRadius:"50%",
+                    background: isOpen ? C.accent : C.navy,
+                    color: isOpen ? C.navy : "#fff",
+                    display:"flex",alignItems:"center",justifyContent:"center",
+                    fontSize:14,fontWeight:"700",flexShrink:0,
+                  }}>{stopIdx+1}</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:15,fontWeight:"700",marginBottom:3,color:C.navy}}>{stop.name}</div>
+                    <div style={{fontSize:12,color:C.muted}}>{stop.type} · {stop.duration_min} min</div>
+                  </div>
+                  <div style={{
+                    color:isOpen?C.accent:C.dim,fontSize:22,
+                    transition:"transform 0.25s",transform:isOpen?"rotate(90deg)":"none",
+                  }}>›</div>
+                </div>
+
+                {isOpen && (
+                  <div style={{padding:"0 18px 22px",borderTop:`1px solid ${C.border}`}}>
+                    <div style={{fontSize:14,color:C.muted,lineHeight:1.75,marginTop:14,marginBottom:16}}>{stop.shortDesc}</div>
+
+                    {stop.highlights?.length > 0 && (
+                      <div style={{marginBottom:18}}>
+                        {stop.highlights.map((h,i)=>(
+                          <div key={i} style={{fontSize:13,color:C.text,marginBottom:7,display:"flex",gap:10,alignItems:"flex-start"}}>
+                            <span style={{color:C.accent,fontWeight:"bold",flexShrink:0,marginTop:2}}>✦</span>
+                            <span style={{lineHeight:1.55}}>{h}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <a href={mapsUrl(stop)} target="_blank" rel="noopener noreferrer" style={{
+                      display:"flex",alignItems:"center",justifyContent:"center",gap:8,
+                      background:"#1A73E8",color:"#fff",
+                      borderRadius:50,padding:"13px 16px",
+                      fontSize:14,fontWeight:"700",textDecoration:"none",marginBottom:20,
+                      boxShadow:"0 3px 10px rgba(26,115,232,0.3)",
+                    }}>
+                      🗺 Naviga con Google Maps
+                    </a>
+
+                    <div style={{height:1,background:C.border,marginBottom:20}}/>
+
+                    {loading ? (
+                      <div style={{display:"flex",alignItems:"center",gap:12,padding:"12px 0"}}>
+                        <Spinner small/><span style={{fontSize:13,color:C.muted}}>Carico la scheda guida…</span>
+                      </div>
+                    ) : detail && !detail.error ? (
+                      <div>
+                        <div style={{fontSize:11,letterSpacing:"0.15em",color:C.accent,fontWeight:"700",textTransform:"uppercase",marginBottom:14}}>
+                          📖 GUIDA
+                        </div>
+
+                        <TTSPlayer text={`${detail.intro} ${detail.story}`} stopId={`${stop.id}-main`} label="Introduzione e storia" tts={tts}/>
+
+                        <div style={{
+                          fontSize:15,color:C.navy,lineHeight:1.8,marginBottom:16,
+                          fontStyle:"italic",fontWeight:"500",
+                          padding:"16px 18px",
+                          background:C.sky,borderRadius:14,
+                          borderLeft:`4px solid ${C.accent}`,
+                        }}>{detail.intro}</div>
+
+                        <div style={{fontSize:14,color:C.text,lineHeight:1.85,marginBottom:22}}>{detail.story}</div>
+
+                        {obsGuide.length > 0 && (
+                          <div style={{marginBottom:22}}>
+                            <div style={{
+                              display:"inline-flex",alignItems:"center",gap:6,
+                              background:C.navy,color:"#fff",
+                              borderRadius:8,padding:"5px 12px",
+                              fontSize:11,fontWeight:"700",letterSpacing:"0.12em",textTransform:"uppercase",
+                              marginBottom:14,
+                            }}>
+                              <span>👁</span><span>Cosa osservare</span>
+                            </div>
+                            {obsGuide.map((t,i)=>(
+                              <div key={i} style={{
+                                fontSize:13,color:C.text,marginBottom:10,
+                                display:"flex",gap:12,alignItems:"flex-start",
+                                padding:"12px 14px",
+                                background: i%2===0 ? C.sky : C.surface,
+                                border:`1px solid ${i%2===0 ? C.skyD : C.border}`,
+                                borderRadius:12,lineHeight:1.65,
+                              }}>
+                                <div style={{
+                                  background:C.navy,color:"#fff",
+                                  borderRadius:"50%",width:22,height:22,minWidth:22,
+                                  display:"flex",alignItems:"center",justifyContent:"center",
+                                  fontSize:11,fontWeight:"700",flexShrink:0,marginTop:1,
+                                }}>{i+1}</div>
+                                <span>{t}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {detail.curiosity && (
+                          <>
+                            <div style={{
+                              background:`linear-gradient(135deg,${C.accent}15,${C.sky})`,
+                              border:`1.5px solid ${C.accent}55`,
+                              borderRadius:14,padding:"14px 16px",marginBottom:10,
+                            }}>
+                              <div style={{fontSize:11,color:C.accentD,fontWeight:"700",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:7}}>
+                                💡 Lo sapevi?
+                              </div>
+                              <div style={{fontSize:13,color:C.navy,lineHeight:1.7}}>{detail.curiosity}</div>
+                            </div>
+                            <TTSPlayer text={`Lo sapevi? ${detail.curiosity}`} stopId={`${stop.id}-curiosity`} label="Curiosità" tts={tts}/>
+                          </>
+                        )}
+
+                        {detail.practical && (
+                          <div style={{
+                            fontSize:12,color:C.muted,lineHeight:1.65,marginBottom:20,
+                            padding:"10px 14px",background:`${C.border}50`,borderRadius:10,
+                          }}>🕐 {detail.practical}</div>
+                        )}
+
+                        <div style={{marginTop:18,background:C.bg,borderRadius:16,padding:16,border:`1.5px solid ${C.border}`}}>
+                          <div style={{fontSize:11,letterSpacing:"0.15em",color:C.navy,fontWeight:"700",textTransform:"uppercase",marginBottom:12}}>
+                            💬 CHIEDI ALLA GUIDA
+                          </div>
+                          {msgs.length > 0 && (
+                            <div style={{maxHeight:220,overflowY:"auto",marginBottom:12,display:"flex",flexDirection:"column",gap:8}}>
+                              {msgs.map((m,i)=>(
+                                <div key={i} style={{display:"flex",flexDirection:"column",alignSelf:m.role==="assistant"?"flex-start":"flex-end",maxWidth:"92%"}}>
+                                  <div style={{
+                                    background:m.role==="assistant"?C.surface:C.navy,
+                                    border:`1.5px solid ${m.role==="assistant"?C.border:C.navy}`,
+                                    borderRadius:12,padding:"10px 14px",
+                                    fontSize:13,color:m.role==="assistant"?C.text:"#fff",
+                                    lineHeight:1.6,
+                                    boxShadow:"0 1px 4px rgba(27,42,74,0.08)",
+                                  }}>{m.content}</div>
+                                  {m.role==="assistant" && (
+                                    <button onClick={()=>tts.speak(m.content,`chat-${stop.id}-${i}`)} style={{
+                                      fontSize:11,color:C.accent,background:"none",border:"none",
+                                      cursor:"pointer",padding:"4px 4px",textAlign:"left",fontWeight:"600",
+                                    }}>
+                                      {tts.ttsStopId===`chat-${stop.id}-${i}`&&tts.ttsState==="speaking"?"⏸ In ascolto…":"▶ Ascolta risposta"}
+                                    </button>
+                                  )}
+                                </div>
+                              ))}
+                              <div ref={chatEndRef}/>
+                            </div>
+                          )}
+                          <div style={{display:"flex",gap:8}}>
+                            <input
+                              style={{
+                                flex:1,background:C.surface,
+                                border:`1.5px solid ${C.border}`,
+                                borderRadius:50,padding:"10px 16px",
+                                color:C.navy,fontSize:13,fontFamily:FONT,outline:"none",
+                              }}
+                              placeholder="Fai una domanda…"
+                              value={chatInput}
+                              onChange={e=>setChatInput(e.target.value)}
+                              onKeyDown={e=>e.key==="Enter"&&sendChat(stop.id)}
+                            />
+                            <button onClick={()=>sendChat(stop.id)} disabled={chatLoading} style={{
+                              background:C.navy,color:"#fff",border:"none",
+                              borderRadius:50,padding:"10px 18px",
+                              fontWeight:"700",cursor:"pointer",fontSize:14,
+                              opacity:chatLoading?0.5:1,minWidth:46,
+                            }}>
+                              {chatLoading?"…":"→"}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : detail?.error ? (
+                      <div style={{fontSize:13,color:C.red,padding:"10px 14px",background:"#FEF2F2",borderRadius:10,border:`1px solid #FCA5A5`}}>
+                        Errore nel caricamento. Tocca di nuovo la tappa.
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+
+        <div style={{marginTop:28,marginBottom:52}}>
+          <OutlineBtn onClick={resetAll}>← Nuovo itinerario</OutlineBtn>
+        </div>
+      </div>
+    </div>
+  );
+
+  return null;
+}
