@@ -78,47 +78,59 @@ function chunkText(text, max = 160) {
 function useTTS() {
   const [ttsState,  setTtsState]  = useState("idle");
   const [ttsStopId, setTtsStopId] = useState(null);
-  const alive = useRef(false); const idx = useRef(0); const list = useRef([]);
+  const alive   = useRef(false);
+  const audioEl = useRef(null);
 
   const cancel = useCallback(() => {
-    alive.current = false; window.speechSynthesis.cancel();
+    alive.current = false;
+    if (audioEl.current) { audioEl.current.pause(); audioEl.current.src = ""; audioEl.current = null; }
     setTtsState("idle"); setTtsStopId(null);
   }, []);
 
-  const playChunk = useCallback((chunks, i) => {
-    if (!alive.current || i >= chunks.length) {
+  const speak = useCallback(async (text, sid) => {
+    // Ferma qualsiasi riproduzione in corso
+    alive.current = false;
+    if (audioEl.current) { audioEl.current.pause(); audioEl.current.src = ""; audioEl.current = null; }
+
+    alive.current = true;
+    setTtsState("loading"); setTtsStopId(sid);
+
+    try {
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+
+      if (!res.ok) throw new Error(`TTS error ${res.status}`);
+      if (!alive.current) return; // cancellato nel frattempo
+
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+
+      const audio = new Audio(url);
+      audioEl.current = audio;
+
+      audio.onplay  = () => { if (alive.current) setTtsState("speaking"); };
+      audio.onpause = () => { if (alive.current) setTtsState("paused"); };
+      audio.onended = () => {
+        URL.revokeObjectURL(url);
+        if (alive.current) { alive.current = false; setTtsState("idle"); setTtsStopId(null); }
+      };
+      audio.onerror = () => {
+        URL.revokeObjectURL(url);
+        if (alive.current) { alive.current = false; setTtsState("idle"); setTtsStopId(null); }
+      };
+
+      await audio.play();
+    } catch (e) {
       if (alive.current) { alive.current = false; setTtsState("idle"); setTtsStopId(null); }
-      return;
     }
-    idx.current = i;
-    const utt = new SpeechSynthesisUtterance(chunks[i]);
-    utt.lang = "it-IT"; utt.rate = 0.9; utt.pitch = 1;
-    const voices = window.speechSynthesis.getVoices();
-    const itVoice = voices.find(v => v.lang === "it-IT" && v.localService)
-                 || voices.find(v => v.lang === "it-IT")
-                 || voices.find(v => v.lang.startsWith("it")) || null;
-    if (itVoice) utt.voice = itVoice;
-    utt.onstart = () => { if (alive.current) setTtsState("speaking"); };
-    utt.onend   = () => { if (alive.current) playChunk(chunks, i + 1); };
-    utt.onerror = e  => { if (e.error !== "interrupted" && alive.current) playChunk(chunks, i + 1); };
-    window.speechSynthesis.speak(utt);
   }, []);
 
-  const speak = useCallback((text, sid) => {
-    alive.current = false; window.speechSynthesis.cancel();
-    alive.current = true; setTtsState("loading"); setTtsStopId(sid);
-    const chunks = chunkText(text); list.current = chunks;
-    const go = () => { setTtsState("speaking"); playChunk(chunks, 0); };
-    if (window.speechSynthesis.getVoices().length > 0) go();
-    else window.speechSynthesis.addEventListener("voiceschanged", function h() {
-      window.speechSynthesis.removeEventListener("voiceschanged", h);
-      if (alive.current) go();
-    });
-  }, [playChunk]);
-
-  const pause  = useCallback(() => { window.speechSynthesis.pause();  setTtsState("paused");   }, []);
-  const resume = useCallback(() => { window.speechSynthesis.resume(); setTtsState("speaking"); }, []);
-  useEffect(() => () => { alive.current = false; window.speechSynthesis.cancel(); }, []);
+  const pause  = useCallback(() => { audioEl.current?.pause(); }, []);
+  const resume = useCallback(() => { audioEl.current?.play(); }, []);
+  useEffect(() => () => { alive.current = false; audioEl.current?.pause(); }, []);
   return { ttsState, ttsStopId, speak, pause, resume, stop: cancel };
 }
 
