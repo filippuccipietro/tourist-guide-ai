@@ -49,6 +49,20 @@ const PACES = [
   {id:"intenso",   label:"Intenso",    emoji:"🏃", desc:"Massimizza le visite"},
 ];
 
+// ─── LOCAL STORAGE ────────────────────────────────────────────────
+const LS_KEY = "tg_saved_v1";
+
+function loadSavedItineraries() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+function persistSaved(list) {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(list)); } catch {}
+}
+
 // ─── CLAUDE API ───────────────────────────────────────────────────
 async function callClaude(messages, sys) {
   const r = await fetch("/api/claude", {
@@ -62,38 +76,56 @@ async function callClaude(messages, sys) {
 }
 
 // ─── TTS ──────────────────────────────────────────────────────────
-function chunkText(text, max = 160) {
-  const clean = text.replace(/\s+/g, " ").trim();
-  const sentences = clean.match(/[^.!?]+[.!?]*/g) || [clean];
-  const out = []; let cur = "";
-  for (const s of sentences) {
-    const t = s.trim(); if (!t) continue;
-    if ((cur + " " + t).trim().length > max) { if (cur) out.push(cur.trim()); cur = t; }
-    else { cur = cur ? cur + " " + t : t; }
-  }
-  if (cur.trim()) out.push(cur.trim());
-  return out.filter(Boolean);
+function fmt(s) {
+  if (!isFinite(s) || s < 0) s = 0;
+  const m   = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return `${m}:${sec.toString().padStart(2, "0")}`;
 }
 
 function useTTS() {
   const [ttsState,  setTtsState]  = useState("idle");
   const [ttsStopId, setTtsStopId] = useState(null);
-  const alive   = useRef(false);
-  const audioEl = useRef(null);
+  const [progress,  setProgress]  = useState({ current: 0, duration: 0 });
+  const alive    = useRef(false);
+  const audioEl  = useRef(null);
+  const audioCtx = useRef(null);
 
   const cancel = useCallback(() => {
     alive.current = false;
-    if (audioEl.current) { audioEl.current.pause(); audioEl.current.src = ""; audioEl.current = null; }
-    setTtsState("idle"); setTtsStopId(null);
+    if (audioEl.current) {
+      audioEl.current.pause();
+      audioEl.current.src = "";
+      audioEl.current = null;
+    }
+    setTtsState("idle");
+    setTtsStopId(null);
+    setProgress({ current: 0, duration: 0 });
+    if ("mediaSession" in navigator) {
+      navigator.mediaSession.playbackState = "none";
+    }
+  }, []);
+
+  const seek = useCallback((t) => {
+    if (audioEl.current) {
+      audioEl.current.currentTime = t;
+      setProgress(p => ({ ...p, current: t }));
+    }
   }, []);
 
   const speak = useCallback(async (text, sid) => {
     // Ferma qualsiasi riproduzione in corso
     alive.current = false;
-    if (audioEl.current) { audioEl.current.pause(); audioEl.current.src = ""; audioEl.current = null; }
+    if (audioEl.current) {
+      audioEl.current.pause();
+      audioEl.current.src = "";
+      audioEl.current = null;
+    }
+    setProgress({ current: 0, duration: 0 });
 
     alive.current = true;
-    setTtsState("loading"); setTtsStopId(sid);
+    setTtsState("loading");
+    setTtsStopId(sid);
 
     try {
       const res = await fetch("/api/tts", {
@@ -103,7 +135,7 @@ function useTTS() {
       });
 
       if (!res.ok) throw new Error(`TTS error ${res.status}`);
-      if (!alive.current) return; // cancellato nel frattempo
+      if (!alive.current) return;
 
       const blob = await res.blob();
       const url  = URL.createObjectURL(blob);
@@ -111,36 +143,135 @@ function useTTS() {
       const audio = new Audio(url);
       audioEl.current = audio;
 
-      audio.onplay  = () => { if (alive.current) setTtsState("speaking"); };
-      audio.onpause = () => { if (alive.current) setTtsState("paused"); };
+      // ── AudioContext: mantiene audio attivo con schermo bloccato (iOS) ──
+      try {
+        if (!audioCtx.current || audioCtx.current.state === "closed") {
+          audioCtx.current = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.current.state === "suspended") {
+          await audioCtx.current.resume();
+        }
+        const src = audioCtx.current.createMediaElementSource(audio);
+        src.connect(audioCtx.current.destination);
+      } catch (_) {
+        // fallback silenzioso se AudioContext non supportato
+      }
+
+      // ── Media Session API: controlli lockscreen (iOS/Android) ──
+      if ("mediaSession" in navigator) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title:  "Guida Turistica AI",
+          artist: "Tourist Guide AI",
+          album:  "Itinerario in corso",
+        });
+        navigator.mediaSession.setActionHandler("play",  () => audio.play());
+        navigator.mediaSession.setActionHandler("pause", () => audio.pause());
+        navigator.mediaSession.setActionHandler("stop",  () => cancel());
+        try {
+          navigator.mediaSession.setActionHandler("seekto", (d) => {
+            if (d.seekTime != null) seek(d.seekTime);
+          });
+        } catch (_) {}
+      }
+
+      audio.onplay = () => {
+        if (!alive.current) return;
+        setTtsState("speaking");
+        if ("mediaSession" in navigator) {
+          navigator.mediaSession.playbackState = "playing";
+        }
+      };
+
+      audio.onpause = () => {
+        if (!alive.current) return;
+        setTtsState("paused");
+        if ("mediaSession" in navigator) {
+          navigator.mediaSession.playbackState = "paused";
+        }
+      };
+
+      audio.onloadedmetadata = () => {
+        setProgress(p => ({ ...p, duration: audio.duration || 0 }));
+        if ("mediaSession" in navigator) {
+          try {
+            navigator.mediaSession.setPositionState({
+              duration:     audio.duration || 0,
+              playbackRate: audio.playbackRate,
+              position:     audio.currentTime,
+            });
+          } catch (_) {}
+        }
+      };
+
+      audio.ontimeupdate = () => {
+        if (!alive.current) return;
+        const cur = audio.currentTime;
+        const dur = audio.duration || 0;
+        setProgress({ current: cur, duration: dur });
+        if ("mediaSession" in navigator && dur > 0) {
+          try {
+            navigator.mediaSession.setPositionState({
+              duration:     dur,
+              playbackRate: audio.playbackRate,
+              position:     cur,
+            });
+          } catch (_) {}
+        }
+      };
+
       audio.onended = () => {
         URL.revokeObjectURL(url);
-        if (alive.current) { alive.current = false; setTtsState("idle"); setTtsStopId(null); }
+        if (alive.current) {
+          alive.current = false;
+          setTtsState("idle");
+          setTtsStopId(null);
+          setProgress({ current: 0, duration: 0 });
+          if ("mediaSession" in navigator) {
+            navigator.mediaSession.playbackState = "none";
+          }
+        }
       };
+
       audio.onerror = () => {
         URL.revokeObjectURL(url);
-        if (alive.current) { alive.current = false; setTtsState("idle"); setTtsStopId(null); }
+        if (alive.current) {
+          alive.current = false;
+          setTtsState("idle");
+          setTtsStopId(null);
+          setProgress({ current: 0, duration: 0 });
+        }
       };
 
       await audio.play();
     } catch (e) {
-      if (alive.current) { alive.current = false; setTtsState("idle"); setTtsStopId(null); }
+      if (alive.current) {
+        alive.current = false;
+        setTtsState("idle");
+        setTtsStopId(null);
+        setProgress({ current: 0, duration: 0 });
+      }
     }
-  }, []);
+  }, [cancel, seek]);
 
   const pause  = useCallback(() => { audioEl.current?.pause(); }, []);
   const resume = useCallback(() => { audioEl.current?.play(); }, []);
-  useEffect(() => () => { alive.current = false; audioEl.current?.pause(); }, []);
-  return { ttsState, ttsStopId, speak, pause, resume, stop: cancel };
+
+  useEffect(() => () => {
+    alive.current = false;
+    audioEl.current?.pause();
+  }, []);
+
+  return { ttsState, ttsStopId, speak, pause, resume, stop: cancel, progress, seek };
 }
 
 function TTSPlayer({ text, stopId, label, tts }) {
-  const { ttsState, ttsStopId, speak, pause, resume, stop } = tts;
-  const mine = ttsStopId === stopId;
+  const { ttsState, ttsStopId, speak, pause, resume, stop, progress, seek } = tts;
+  const mine    = ttsStopId === stopId;
   const loading  = mine && ttsState === "loading";
   const speaking = mine && ttsState === "speaking";
   const paused   = mine && ttsState === "paused";
   const active   = mine && ttsState !== "idle";
+  const hasSeek  = active && !loading && progress.duration > 0;
 
   const onTap = () => {
     if (loading)  return;
@@ -151,39 +282,81 @@ function TTSPlayer({ text, stopId, label, tts }) {
   };
 
   return (
-    <div onClick={onTap} style={{
-      display:"flex", alignItems:"center", gap:10,
+    <div style={{
       background: active ? `${C.accent}18` : C.sky,
       border:`1.5px solid ${active ? C.accent : C.skyD}`,
-      borderRadius:14, padding:"12px 14px", marginBottom:14,
-      cursor: loading ? "wait" : "pointer",
-      WebkitTapHighlightColor:"transparent", minHeight:50, userSelect:"none",
+      borderRadius:14, marginBottom:14, overflow:"hidden",
     }}>
-      <div style={{
-        width:38, height:38, minWidth:38, borderRadius:"50%",
-        background: active ? C.accent : C.navy, color:"#fff",
-        display:"flex", alignItems:"center", justifyContent:"center",
-        fontSize:15, flexShrink:0,
+      {/* Riga principale */}
+      <div onClick={onTap} style={{
+        display:"flex", alignItems:"center", gap:10,
+        padding:"12px 14px",
+        cursor: loading ? "wait" : "pointer",
+        WebkitTapHighlightColor:"transparent", minHeight:50, userSelect:"none",
       }}>
-        {loading ? "…" : speaking ? "⏸" : "▶"}
-      </div>
-      <div style={{fontSize:13, color: active ? C.accentD : C.navy, fontWeight:"500", flex:1, lineHeight:1.4}}>
-        {loading ? "Avvio audio…" : speaking ? `▶ ${label}` : paused ? `⏸ ${label}` : `Ascolta: ${label}`}
-      </div>
-      {speaking && (
-        <div style={{display:"flex",alignItems:"center",gap:3}}>
-          {[1,2,3,4,5].map(n=>(
-            <div key={n} style={{width:3,borderRadius:2,background:C.accent,animation:`wave${n} 0.7s ease-in-out infinite`,animationDelay:`${(n-1)*0.1}s`}}/>
-          ))}
+        <div style={{
+          width:38, height:38, minWidth:38, borderRadius:"50%",
+          background: active ? C.accent : C.navy, color:"#fff",
+          display:"flex", alignItems:"center", justifyContent:"center",
+          fontSize:15, flexShrink:0,
+        }}>
+          {loading ? "…" : speaking ? "⏸" : "▶"}
         </div>
-      )}
-      {active && !loading && (
-        <div onClick={e=>{e.stopPropagation();stop();}} style={{
-          width:30,height:30,minWidth:30,borderRadius:"50%",
-          background:C.navy,color:"#fff",
-          display:"flex",alignItems:"center",justifyContent:"center",
-          fontSize:11,cursor:"pointer",marginLeft:4,
-        }}>■</div>
+        <div style={{fontSize:13, color: active ? C.accentD : C.navy, fontWeight:"500", flex:1, lineHeight:1.4}}>
+          {loading ? "Avvio audio…" : speaking ? `▶ ${label}` : paused ? `⏸ ${label}` : `Ascolta: ${label}`}
+        </div>
+        {speaking && (
+          <div style={{display:"flex",alignItems:"center",gap:3}}>
+            {[1,2,3,4,5].map(n=>(
+              <div key={n} style={{width:3,borderRadius:2,background:C.accent,animation:`wave${n} 0.7s ease-in-out infinite`,animationDelay:`${(n-1)*0.1}s`}}/>
+            ))}
+          </div>
+        )}
+        {active && !loading && (
+          <div onClick={e=>{e.stopPropagation();stop();}} style={{
+            width:30,height:30,minWidth:30,borderRadius:"50%",
+            background:C.navy,color:"#fff",
+            display:"flex",alignItems:"center",justifyContent:"center",
+            fontSize:11,cursor:"pointer",marginLeft:4,
+          }}>■</div>
+        )}
+      </div>
+
+      {/* Seek bar */}
+      {hasSeek && (
+        <div
+          style={{padding:"0 14px 12px"}}
+          onClick={e => e.stopPropagation()}
+        >
+          <input
+            type="range"
+            min={0}
+            max={progress.duration}
+            step={0.5}
+            value={progress.current}
+            onChange={e => seek(parseFloat(e.target.value))}
+            onMouseDown={e => e.stopPropagation()}
+            onTouchStart={e => e.stopPropagation()}
+            style={{
+              width:"100%",
+              accentColor: C.accent,
+              cursor:"pointer",
+              height:4,
+              WebkitAppearance:"none",
+              appearance:"none",
+              background:`linear-gradient(to right, ${C.accent} ${(progress.current/progress.duration)*100}%, ${C.skyD} 0%)`,
+              borderRadius:2,
+              outline:"none",
+            }}
+          />
+          <div style={{
+            display:"flex", justifyContent:"space-between",
+            fontSize:11, color:C.accentD, marginTop:4, fontWeight:"600",
+          }}>
+            <span>{fmt(progress.current)}</span>
+            <span>−{fmt(Math.max(0, progress.duration - progress.current))}</span>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -308,7 +481,7 @@ function TravelSegment({ travel }) {
 }
 
 // ─── WELCOME ──────────────────────────────────────────────────────
-function WelcomeScreen({ onNext }) {
+function WelcomeScreen({ onNext, savedCount, onOpenSaved }) {
   const inputRef = useRef(null);
   const go = useCallback(() => {
     const v = inputRef.current?.value?.trim();
@@ -351,6 +524,95 @@ function WelcomeScreen({ onNext }) {
         }}
       />
       <AccentBtn onClick={go}>Inizia il viaggio →</AccentBtn>
+      {savedCount > 0 && (
+        <button onClick={onOpenSaved} style={{
+          marginTop:14, width:"100%", background:"transparent",
+          border:`1.5px solid ${C.navy}`, borderRadius:50, padding:"14px 20px",
+          fontSize:14, fontWeight:"600", fontFamily:FONT,
+          cursor:"pointer", color:C.navy, letterSpacing:"0.01em",
+          display:"flex", alignItems:"center", justifyContent:"center", gap:8,
+        }}>
+          <span>📂</span>
+          <span>Itinerari salvati ({savedCount})</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─── SAVED SCREEN ─────────────────────────────────────────────────
+function SavedScreen({ saved, onLoad, onDelete, onBack }) {
+  return (
+    <div style={rootStyle}>
+      <Header label="Itinerari salvati" />
+      <div style={{padding:"20px"}}>
+        {saved.length === 0 ? (
+          <div style={{textAlign:"center",padding:"48px 20px",color:C.muted}}>
+            <div style={{fontSize:40,marginBottom:16}}>📭</div>
+            <div style={{fontSize:15}}>Nessun itinerario salvato.</div>
+          </div>
+        ) : saved.map(entry => (
+          <div key={entry.id} style={{
+            background:C.surface,
+            border:`1.5px solid ${C.border}`,
+            borderRadius:16, marginBottom:12, overflow:"hidden",
+            boxShadow:"0 2px 8px rgba(27,42,74,0.07)",
+          }}>
+            <div style={{padding:"16px 18px"}}>
+              <div style={{
+                display:"flex", alignItems:"flex-start",
+                justifyContent:"space-between", gap:12,
+              }}>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:17,fontWeight:"800",color:C.navy,marginBottom:4}}>
+                    {entry.city}
+                  </div>
+                  <div style={{fontSize:12,color:C.muted,marginBottom:8}}>
+                    {entry.duration} · {entry.pace} · {entry.itinerary?.stops?.length} tappe
+                  </div>
+                  <div style={{fontSize:11,color:C.dim}}>
+                    Salvato il {new Date(entry.savedAt).toLocaleDateString("it-IT",{day:"numeric",month:"long",year:"numeric"})}
+                  </div>
+                </div>
+                <button
+                  onClick={() => onDelete(entry.id)}
+                  style={{
+                    background:"#FEF2F2", border:"1px solid #FCA5A5",
+                    borderRadius:8, padding:"6px 10px",
+                    fontSize:12, color:C.red, cursor:"pointer",
+                    fontFamily:FONT, fontWeight:"600", flexShrink:0,
+                  }}
+                >
+                  🗑
+                </button>
+              </div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:10}}>
+                {entry.interests?.slice(0,4).map(id => {
+                  const it = INTERESTS.find(i=>i.id===id);
+                  return it ? (
+                    <span key={id} style={{
+                      background:C.sky,border:`1px solid ${C.skyD}`,
+                      borderRadius:20,padding:"3px 10px",
+                      fontSize:11,color:C.navy,fontWeight:"600",
+                    }}>{it.emoji} {it.label}</span>
+                  ) : null;
+                })}
+              </div>
+            </div>
+            <div style={{padding:"0 18px 16px"}}>
+              <button onClick={() => onLoad(entry)} style={{
+                width:"100%", background:C.navy, color:"#fff",
+                border:"none", borderRadius:50, padding:"13px 16px",
+                fontSize:14, fontWeight:"700", fontFamily:FONT,
+                cursor:"pointer",
+              }}>
+                Apri itinerario →
+              </button>
+            </div>
+          </div>
+        ))}
+        <OutlineBtn onClick={onBack}>← Torna alla home</OutlineBtn>
+      </div>
     </div>
   );
 }
@@ -370,6 +632,8 @@ export default function App() {
   const [chatInput,   setChatInput]   = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const [error,       setError]       = useState("");
+  const [saved,       setSaved]       = useState(() => loadSavedItineraries());
+  const [saveMsg,     setSaveMsg]     = useState("");
   const chatEndRef = useRef(null);
   const tts = useTTS();
 
@@ -383,9 +647,13 @@ export default function App() {
       @keyframes wave3{0%,100%{height:14px}50%{height:6px}}
       @keyframes wave4{0%,100%{height:6px}50%{height:20px}}
       @keyframes wave5{0%,100%{height:10px}50%{height:4px}}
+      @keyframes saveFlash{0%{opacity:0;transform:translateY(6px)}20%{opacity:1;transform:translateY(0)}80%{opacity:1}100%{opacity:0}}
       *{box-sizing:border-box} body{margin:0;background:${C.bg}}
       input:focus{border-color:${C.accent}!important;outline:none;box-shadow:0 0 0 3px ${C.accent}22!important}
       ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:${C.border};border-radius:2px}
+      input[type=range]{-webkit-appearance:none;appearance:none;height:4px;border-radius:2px;outline:none;cursor:pointer;}
+      input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:${C.accent};cursor:pointer;margin-top:-7px;}
+      input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:${C.accent};cursor:pointer;border:none;}
     `;
     document.head.appendChild(s);
     return () => document.head.removeChild(s);
@@ -394,6 +662,47 @@ export default function App() {
   useEffect(() => { chatEndRef.current?.scrollIntoView({behavior:"smooth"}); }, [chatMsgs, activeStop]);
 
   const toggle = id => setInterests(p => p.includes(id) ? p.filter(x=>x!==id) : [...p,id]);
+
+  // ── Salva itinerario corrente ─────────────────────────────────
+  const saveItinerary = () => {
+    if (!itinerary) return;
+    const entry = {
+      id:         Date.now(),
+      savedAt:    new Date().toISOString(),
+      city,
+      duration,
+      pace,
+      interests,
+      itinerary,
+      stopDetails,
+    };
+    const updated = [entry, ...saved].slice(0, 15); // max 15 salvati
+    setSaved(updated);
+    persistSaved(updated);
+    setSaveMsg("✓ Itinerario salvato!");
+    setTimeout(() => setSaveMsg(""), 2500);
+  };
+
+  // ── Carica itinerario salvato ─────────────────────────────────
+  const loadSaved = (entry) => {
+    tts.stop();
+    setCity(entry.city);
+    setDuration(entry.duration);
+    setPace(entry.pace);
+    setInterests(entry.interests || []);
+    setItinerary(entry.itinerary);
+    setStopDetails(entry.stopDetails || {});
+    setActiveStop(null);
+    setChatMsgs({});
+    setScreen("itinerary");
+  };
+
+  // ── Elimina itinerario salvato ────────────────────────────────
+  const deleteSaved = (id) => {
+    const updated = saved.filter(e => e.id !== id);
+    setSaved(updated);
+    persistSaved(updated);
+  };
 
   const generate = async () => {
     setScreen("generating"); setError("");
@@ -519,7 +828,20 @@ Restituisci SOLO questo JSON:
   // ── SCREENS ────────────────────────────────────────────────────
 
   if (screen === "welcome") return (
-    <WelcomeScreen onNext={c => { setCity(c); setScreen("interests"); }} />
+    <WelcomeScreen
+      onNext={c => { setCity(c); setScreen("interests"); }}
+      savedCount={saved.length}
+      onOpenSaved={() => setScreen("saved")}
+    />
+  );
+
+  if (screen === "saved") return (
+    <SavedScreen
+      saved={saved}
+      onLoad={loadSaved}
+      onDelete={deleteSaved}
+      onBack={() => setScreen("welcome")}
+    />
   );
 
   if (screen === "interests") return (
@@ -654,7 +976,7 @@ Restituisci SOLO questo JSON:
           <div style={{fontSize:15,color:C.accentL,fontStyle:"italic",lineHeight:1.65,marginBottom:14}}>
             "{itinerary.tagline}"
           </div>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:14}}>
             {[`⏱ ${itinerary.duration}`,`🚶 ${itinerary.pace}`,`📍 ${itinerary.stops?.length} tappe`].map(b=>(
               <span key={b} style={{
                 background:`${C.accent}22`,border:`1px solid ${C.accentD}`,
@@ -662,8 +984,31 @@ Restituisci SOLO questo JSON:
               }}>{b}</span>
             ))}
           </div>
+
+          {/* Pulsante salva */}
+          <button onClick={saveItinerary} style={{
+            width:"100%", background:`${C.accent}22`,
+            border:`1.5px solid ${C.accent}`,
+            borderRadius:50, padding:"11px 16px",
+            fontSize:13, fontWeight:"700", color:C.accentL,
+            fontFamily:FONT, cursor:"pointer", letterSpacing:"0.01em",
+            marginBottom: itinerary.tips ? 14 : 0,
+          }}>
+            💾 Salva itinerario
+          </button>
+
+          {saveMsg && (
+            <div style={{
+              fontSize:12, color:"#4ADE80", textAlign:"center",
+              marginTop:6, animation:"saveFlash 2.5s ease forwards",
+              fontWeight:"600",
+            }}>
+              {saveMsg}
+            </div>
+          )}
+
           {itinerary.tips && (
-            <div style={{marginTop:14,fontSize:13,color:"rgba(255,255,255,0.65)",lineHeight:1.6,borderTop:`1px solid rgba(255,255,255,0.1)`,paddingTop:14}}>
+            <div style={{fontSize:13,color:"rgba(255,255,255,0.65)",lineHeight:1.6,borderTop:`1px solid rgba(255,255,255,0.1)`,paddingTop:14}}>
               💡 {itinerary.tips}
             </div>
           )}
