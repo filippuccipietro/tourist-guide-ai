@@ -71,7 +71,7 @@ async function callClaude(messages, sys) {
     body: JSON.stringify({ model: "claude-sonnet-4-5", max_tokens: 5000, system: sys, messages }),
   });
   const d = await r.json();
-  if (d.error) throw new Error(d.error.message);
+  if (d.error) throw new Error(typeof d.error === 'string' ? d.error : (d.error.message || JSON.stringify(d.error)));
   return d.content[0].text;
 }
 
@@ -763,7 +763,7 @@ REGOLE IMPORTANTI:
       const raw = await callClaude([{role:"user",content:msg}], sys);
       setItinerary(JSON.parse(raw.replace(/```json|```/g,"").trim()));
       setScreen("itinerary");
-    } catch(e) { setError("Errore nella generazione. Riprova."); setScreen("pace"); }
+    } catch(e) { setError("Errore: " + (e.message || String(e))); setScreen("pace"); }
   };
 
   const loadDetail = async (stop) => {
