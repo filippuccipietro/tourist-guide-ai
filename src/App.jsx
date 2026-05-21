@@ -65,7 +65,7 @@ function persistSaved(list) {
 
 // ─── CLAUDE API ───────────────────────────────────────────────────
 async function callClaude(messages, sys) {
-  const r = await fetch("/api/claude", {
+  const r = await fetch("/api/gemini", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ model: "claude-sonnet-4-5", max_tokens: 5000, system: sys, messages }),
