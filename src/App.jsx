@@ -65,7 +65,7 @@ function persistSaved(list) {
 
 // ─── CLAUDE API ───────────────────────────────────────────────────
 async function callClaude(messages, sys, model) {
-  const r = await fetch("/api/claude", {
+  const r = await fetch(model&&model.startsWith("gemini")?"/api/gemini":"/api/claude", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ max_tokens: 5000, system: sys, messages, model }),
@@ -941,6 +941,7 @@ Restituisci SOLO questo JSON:
           {[
             {id:"claude-haiku-4-5-20251001", label:"Haiku", emoji:"⚡", desc:"Veloce & economico", cost:"~0.01€/gen"},
             {id:"claude-sonnet-4-6",          label:"Sonnet", emoji:"✨", desc:"Più ricco e dettagliato", cost:"~0.05€/gen"},
+           {id:"gemini-2.0-flash", label:"Gemini Flash", emoji:"✦", desc:"Google · veloce (richiede GEMINI_API_KEY)", cost:"~0€/gen"},
           ].map(m => (
             <div key={m.id} onClick={()=>setModel(m.id)} style={{
               background: model===m.id ? C.sky : C.surface,
