@@ -2,23 +2,23 @@ import { useState, useRef, useEffect, useCallback } from "react";
 
 // ─── DESIGN TOKENS (stile lene.it: ambra + navy + cielo) ─────────
 const C = {
-  bg:      "#F7F6F3",
+  bg:      "#F5EFE6",
   surface: "#FFFFFF",
   card:    "#FFFFFF",
-  border:  "#E8E4DB",
-  accent:  "#F5A623",
-  accentL: "#FFD166",
-  accentD: "#C47F00",
-  navy:    "#1B2A4A",
+  border:  "#DDDDDD",
+  accent:  "#C0392B",
+  accentL: "#D4A017",
+  accentD: "#9B2D23",
+  navy:    "#1C2B4A",
   navyL:   "#2D4A7A",
-  sky:     "#EBF5FF",
-  skyD:    "#C3DCF5",
-  text:    "#1B2A4A",
-  muted:   "#707A8A",
+  sky:     "#FDF8F3",
+  skyD:    "#EDE4D8",
+  text:    "#1C2B4A",
+  muted:   "#666666",
   dim:     "#B0B8C4",
   red:     "#EF4444",
   travel:  "#F0F7FF",
-  travelB: "#BDD5F0",
+  travelB: "#D4E0EA",
 };
 
 const FONT = "system-ui,-apple-system,'Segoe UI','Helvetica Neue',Arial,sans-serif";
@@ -160,8 +160,8 @@ function useTTS() {
       // ── Media Session API: controlli lockscreen (iOS/Android) ──
       if ("mediaSession" in navigator) {
         navigator.mediaSession.metadata = new MediaMetadata({
-          title:  "Guida Turistica AI",
-          artist: "Tourist Guide AI",
+          title:  "GuidaMe",
+          artist: "GuidaMe",
           album:  "Itinerario in corso",
         });
         navigator.mediaSession.setActionHandler("play",  () => audio.play());
@@ -939,8 +939,8 @@ Restituisci SOLO questo JSON:
         <div style={{marginTop:24,marginBottom:4}}>
           <div style={{fontSize:13,fontWeight:"700",color:C.muted,letterSpacing:"0.05em",textTransform:"uppercase",marginBottom:12}}>Qualità della guida</div>
           {[
-            {id:"claude-haiku-4-5-20251001", label:"Haiku", emoji:"⚡", desc:"Veloce & economico", cost:"~0.01€/gen"},
-            {id:"claude-sonnet-4-6",          label:"Sonnet", emoji:"✨", desc:"Più ricco e dettagliato", cost:"~0.05€/gen"},
+            {id:"claude-haiku-4-5-20251001", label:"Haiku", emoji:"⚡", desc:"Veloce & essenziale", cost:"~0.01€/gen"},
+            {id:"claude-sonnet-4-6",          label:"Sonnet", emoji:"✨", desc:"Ricco, evocativo, come un documentario", cost:"~0.05€/gen"},
           ].map(m => (
             <div key={m.id} onClick={()=>setModel(m.id)} style={{
               background: model===m.id ? C.sky : C.surface,
