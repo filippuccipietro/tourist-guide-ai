@@ -8,6 +8,8 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "ANTHROPIC_API_KEY not configured" });
   }
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const body = { ...req.body };
+  if (!body.model) body.model = "claude-haiku-4-5-20251001";
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -17,7 +19,7 @@ export default async function handler(req, res) {
           "x-api-key": apiKey,
           "anthropic-version": "2023-06-01",
         },
-        body: JSON.stringify(req.body),
+        body: JSON.stringify(body),
       });
       const data = await response.json();
       if (response.status === 529 && attempt < 3) {
