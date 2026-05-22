@@ -264,7 +264,7 @@ function useTTS() {
   return { ttsState, ttsStopId, speak, pause, resume, stop: cancel, progress, seek };
 }
 
-function TTSPlayer({ text, stopId, label, tts }) {
+function TTSPlayer({ text, stopId, label, tts, onClose }) {
   const { ttsState, ttsStopId, speak, pause, resume, stop, progress, seek } = tts;
   const mine    = ttsStopId === stopId;
   const loading  = mine && ttsState === "loading";
@@ -303,7 +303,7 @@ function TTSPlayer({ text, stopId, label, tts }) {
           {loading ? "…" : speaking ? "⏸" : "▶"}
         </div>
         <div style={{fontSize:13, color: active ? C.accentD : C.navy, fontWeight:"500", flex:1, lineHeight:1.4}}>
-          {loading ? "Avvio audio…" : speaking ? `▶ ${label}` : paused ? `⏸ ${label}` : `Ascolta: ${label}`}
+          {loading ? "Avvio audio…" : label}
         </div>
         {speaking && (
           <div style={{display:"flex",alignItems:"center",gap:3}}>
@@ -312,14 +312,12 @@ function TTSPlayer({ text, stopId, label, tts }) {
             ))}
           </div>
         )}
-        {active && !loading && (
-          <div onClick={e=>{e.stopPropagation();stop();}} style={{
-            width:30,height:30,minWidth:30,borderRadius:"50%",
-            background:C.navy,color:"#fff",
-            display:"flex",alignItems:"center",justifyContent:"center",
-            fontSize:11,cursor:"pointer",marginLeft:4,
-          }}>■</div>
-        )}
+        <div onClick={e=>{e.stopPropagation(); if(active) stop(); if(onClose) onClose();}} style={{
+              width:30,height:30,borderRadius:"50%",
+              background:C.navy,color:"#fff",
+              display:"flex",alignItems:"center",justifyContent:"center",
+              fontSize:14,cursor:"pointer",marginLeft:4,flexShrink:0,
+            }}>✕</div>
       </div>
 
       {/* Seek bar */}
@@ -1119,7 +1117,7 @@ Restituisci SOLO questo JSON:
                           📖 GUIDA
                         </div>
 
-                        <TTSPlayer text={`${detail.intro} ${detail.story}`} stopId={`${stop.id}-main`} label="Introduzione e storia" tts={tts}/>
+                        <TTSPlayer text={`${detail.intro} ${detail.story}`} stopId={`${stop.id}-main`} label="Introduzione e storia" tts={tts} onClose={() => setActiveStop(null)}/>
 
                         <div style={{
                           fontSize:15,color:C.navy,lineHeight:1.8,marginBottom:16,
@@ -1175,7 +1173,7 @@ Restituisci SOLO questo JSON:
                               </div>
                               <div style={{fontSize:13,color:C.navy,lineHeight:1.7}}>{detail.curiosity}</div>
                             </div>
-                            <TTSPlayer text={`Lo sapevi? ${detail.curiosity}`} stopId={`${stop.id}-curiosity`} label="Curiosità" tts={tts}/>
+                            <TTSPlayer text={`Lo sapevi? ${detail.curiosity}`} stopId={`${stop.id}-curiosity`} label="Curiosità" tts={tts} onClose={() => setActiveStop(null)}/>
                           </>
                         )}
 
