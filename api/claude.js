@@ -7,19 +7,27 @@ export default async function handler(req, res) {
   if (!apiKey) {
     return res.status(500).json({ error: "ANTHROPIC_API_KEY not configured" });
   }
-  try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify(req.body),
-    });
-    const data = await response.json();
-    return res.status(response.status).json(data);
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify(req.body),
+      });
+      const data = await response.json();
+      if (response.status === 529 && attempt < 3) {
+        await sleep(attempt * 2000);
+        continue;
+      }
+      return res.status(response.status).json(data);
+    } catch (err) {
+      if (attempt === 3) return res.status(500).json({ error: err.message });
+      await sleep(attempt * 2000);
+    }
   }
 }
