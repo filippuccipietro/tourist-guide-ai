@@ -64,11 +64,11 @@ function persistSaved(list) {
 }
 
 // ─── CLAUDE API ───────────────────────────────────────────────────
-async function callClaude(messages, sys) {
+async function callClaude(messages, sys, model) {
   const r = await fetch("/api/claude", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model: "claude-sonnet-4-5", max_tokens: 5000, system: sys, messages }),
+    body: JSON.stringify({ max_tokens: 5000, system: sys, messages, model }),
   });
   const d = await r.json();
   if (d.error) throw new Error(typeof d.error === 'string' ? d.error : (d.error.message || JSON.stringify(d.error)));
@@ -624,6 +624,7 @@ export default function App() {
   const [interests,   setInterests]   = useState([]);
   const [duration,    setDuration]    = useState("");
   const [pace,        setPace]        = useState("");
+  const [model,       setModel]       = useState("claude-haiku-4-5-20251001");
   const [itinerary,   setItinerary]   = useState(null);
   const [activeStop,  setActiveStop]  = useState(null);
   const [stopDetails, setStopDetails] = useState({});
@@ -760,7 +761,7 @@ REGOLE IMPORTANTI:
 - Calcola walking_min in base alla distanza reale tra le coordinate delle due tappe (1 minuto ogni 80 metri a piedi circa).
 - Se la distanza è > 1km suggerisci taxi o bus come mode_suggestion alternativo.`;
 
-      const raw = await callClaude([{role:"user",content:msg}], sys);
+      const raw = await callClaude([{role:"user",content:msg}], sys, model);
       setItinerary(JSON.parse(raw.replace(/```json|```/g,"").trim()));
       setScreen("itinerary");
     } catch(e) { setError("Errore: " + (e.message || String(e))); setScreen("pace"); }
@@ -937,6 +938,33 @@ Restituisci SOLO questo JSON:
             )}
           </div>
         ))}
+        <div style={{marginTop:24,marginBottom:4}}>
+          <div style={{fontSize:13,fontWeight:"700",color:C.muted,letterSpacing:"0.05em",textTransform:"uppercase",marginBottom:12}}>Qualità della guida</div>
+          {[
+            {id:"claude-haiku-4-5-20251001", label:"Haiku", emoji:"⚡", desc:"Veloce & economico", cost:"~0.01€/gen"},
+            {id:"claude-sonnet-4-6",          label:"Sonnet", emoji:"✨", desc:"Più ricco e dettagliato", cost:"~0.05€/gen"},
+          ].map(m => (
+            <div key={m.id} onClick={()=>setModel(m.id)} style={{
+              background: model===m.id ? C.sky : C.surface,
+              border:`2px solid ${model===m.id ? C.accent : C.border}`,
+              borderRadius:14, padding:"14px 18px", cursor:"pointer",
+              display:"flex", alignItems:"center", justifyContent:"space-between",
+              marginBottom:10, WebkitTapHighlightColor:"transparent",
+              boxShadow:"0 1px 4px rgba(27,42,74,0.06)", transition:"all 0.15s",
+            }}>
+              <div style={{display:"flex",alignItems:"center",gap:14}}>
+                <span style={{fontSize:26}}>{m.emoji}</span>
+                <div>
+                  <div style={{fontWeight:"700",fontSize:15,color:C.navy}}>{m.label}</div>
+                  <div style={{fontSize:12,color:C.muted,marginTop:2}}>{m.desc} · <span style={{color:C.accentD,fontWeight:"600"}}>{m.cost}</span></div>
+                </div>
+              </div>
+              {model===m.id && (
+                <div style={{width:24,height:24,borderRadius:"50%",background:C.accent,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:"bold",color:C.navy}}>✓</div>
+              )}
+            </div>
+          ))}
+        </div>
         {error && (
           <div style={{color:C.red,fontSize:13,marginBottom:12,marginTop:8,padding:"10px 14px",background:"#FEF2F2",borderRadius:10,border:`1px solid #FCA5A5`}}>
             {error}
