@@ -1,24 +1,25 @@
-import Anthropic from "@anthropic-ai/sdk";
-
+// Vercel Serverless Function — proxy sicuro per Anthropic API
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: "ANTHROPIC_API_KEY not configured" });
-
-  const { messages, system, max_tokens, model } = req.body;
-  const modelId = model || "claude-haiku-4-5-20251001";
-
-  const client = new Anthropic({ apiKey });
+  if (!apiKey) {
+    return res.status(500).json({ error: "ANTHROPIC_API_KEY not configured" });
+  }
   try {
-    const response = await client.messages.create({
-      model: modelId,
-      max_tokens: max_tokens || 5000,
-      ...(system ? { system } : {}),
-      messages,
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify(req.body),
     });
-    res.json({ content: response.content });
+    const data = await response.json();
+    return res.status(response.status).json(data);
   } catch (err) {
-    console.error("Claude API error:", err.message);
-    res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: err.message });
   }
 }
