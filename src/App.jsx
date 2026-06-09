@@ -135,6 +135,16 @@ function useTTS() {
     setTtsState("loading");
     setTtsStopId(sid);
 
+    // ── AudioContext: resume sincrono nel contesto del click utente (prima del fetch) ──
+    try {
+      if (!audioCtx.current || audioCtx.current.state === "closed") {
+        audioCtx.current = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.current.state === "suspended") {
+        audioCtx.current.resume(); // fire-and-forget: non await, eseguito nel contesto click
+      }
+    } catch (_) {}
+
     // Timeout 15 secondi per evitare il blocco della CTA
     const controller = new AbortController();
     const timeoutId  = setTimeout(() => controller.abort(), 15000);
@@ -156,14 +166,12 @@ function useTTS() {
       const audio = new Audio(url);
       audioEl.current = audio;
 
-      // ── AudioContext: mantiene audio attivo con schermo bloccato (iOS) ──
+      // ── AudioContext: connetti solo se già in running state ──
       try {
-        if (!audioCtx.current || audioCtx.current.state === "closed") {
-          audioCtx.current = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.current && audioCtx.current.state === "running") {
+          const src = audioCtx.current.createMediaElementSource(audio);
+          src.connect(audioCtx.current.destination);
         }
-        if (audioCtx.current.state === "suspended") await audioCtx.current.resume();
-        const src = audioCtx.current.createMediaElementSource(audio);
-        src.connect(audioCtx.current.destination);
       } catch (_) {}
 
       // ── Media Session API: controlli lockscreen ──
@@ -250,7 +258,7 @@ function useTTS() {
         setProgress({ current: 0, duration: 0 });
         setTtsError(e.name === "AbortError"
           ? "Timeout: audio non disponibile. Riprova."
-          : "Audio non disponibile. Riprova.");
+          : `Audio non disponibile [${e.name}: ${e.message}]. Riprova.`);
         setLastFailedId(sid);
       }
     }
