@@ -957,6 +957,7 @@ export default function App() {
   const [duration,     setDuration]     = useState("");
   const [pace,         setPace]         = useState("");
   const [socialMode,   setSocialMode]   = useState(false);
+  const [modelChoice,  setModelChoice]  = useState("claude-haiku-4-5-20251001");
   const [itinerary,    setItinerary]    = useState(null);
   const [activeStop,   setActiveStop]   = useState(null);
   const [stopDetails,  setStopDetails]  = useState({});
@@ -1109,7 +1110,7 @@ REGOLE:
 - Calcola walking_min sulla distanza reale (1 min ogni 80 m).
 - Se distanza > 1km suggerisci taxi o bus come mode_suggestion.`;
 
-      const raw = await callClaude([{ role: "user", content: msg }], sys);
+      const raw = await callClaude([{ role: "user", content: msg }], sys, modelChoice);
       setItinerary(JSON.parse(raw.replace(/```json|```/g, "").trim()));
       setScreen("itinerary");
     } catch (e) {
@@ -1139,7 +1140,7 @@ Restituisci SOLO questo JSON:
   "curiosity": "Una curiosità autentica, verificabile, poco nota. 2-3 frasi con un dettaglio specifico che sorprenda davvero.",
   "practical": "Orari, prezzo biglietto se applicabile, consiglio specifico su quando visitare per evitare la folla."
 }`;
-      const raw = await callClaude([{ role: "user", content: msg }], sys);
+      const raw = await callClaude([{ role: "user", content: msg }], sys, modelChoice);
       setStopDetails(p => ({ ...p, [stop.id]: JSON.parse(raw.replace(/```json|```/g, "").trim()) }));
     } catch { setStopDetails(p => ({ ...p, [stop.id]: { error: true } })); }
     setLoadingDet(null);
@@ -1161,7 +1162,7 @@ Restituisci SOLO questo JSON:
   "tiktokScript": "Script TikTok 30 secondi: 4-5 momenti con [azione] e dialogo/commento breve per ciascuno.",
   "hashtags": ["hashtag1", "hashtag2", "hashtag3", "hashtag4", "hashtag5", "hashtag6"]
 }`;
-      const raw = await callClaude([{ role: "user", content: msg }], sys);
+      const raw = await callClaude([{ role: "user", content: msg }], sys, modelChoice);
       setSocialKits(p => ({ ...p, [stop.id]: JSON.parse(raw.replace(/```json|```/g, "").trim()) }));
     } catch {
       setSocialKits(p => ({ ...p, [stop.id]: { error: true } }));
@@ -1187,7 +1188,7 @@ Restituisci SOLO questo JSON:
     setChatLoading(true);
     try {
       const sys = `Sei una guida turistica esperta a ${itinerary.city}, in piedi accanto al visitatore presso "${stop.name}". Parla come un professionista competente e diretto, non come un manuale. Usa il "tu". Contesto: ${detail?.story || stop.shortDesc}. Interessi del visitatore: ${interests.map(id => INTERESTS.find(i => i.id === id)?.label).join(", ")}. Rispondi in italiano, max 120 parole, tono chiaro e personale.`;
-      const reply = await callClaude(msgs, sys);
+      const reply = await callClaude(msgs, sys, modelChoice);
       setChatMsgs(m => ({ ...m, [stopId]: [...msgs, { role: "assistant", content: reply }] }));
     } catch {
       setChatMsgs(m => ({ ...m, [stopId]: [...msgs, { role: "assistant", content: "Errore. Riprova." }] }));
@@ -1206,7 +1207,7 @@ Restituisci SOLO questo JSON:
     setScreen("welcome"); setCity(""); setStartPoint(null);
     setInterests([]); setDuration(""); setPace("");
     setItinerary(null); setActiveStop(null); setStopDetails({});
-    setChatMsgs({}); setSocialKits({}); setSocialMode(false);
+    setChatMsgs({}); setSocialKits({}); setSocialMode(false); setModelChoice("claude-haiku-4-5-20251001");
   };
 
   // ── SCREENS ───────────────────────────────────────────────────
@@ -1372,6 +1373,31 @@ Restituisci SOLO questo JSON:
               transition: "left 0.25s",
               boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
             }}/>
+          </div>
+        </div>
+
+        {/* Model selector */}
+        <div style={{ marginTop: 8, marginBottom: 8 }}>
+          <div style={{ fontSize: 12, color: C.muted, fontWeight: "600", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 8 }}>
+            Modello AI
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {[
+              { id: "claude-haiku-4-5-20251001", label: "Haiku", icon: "⚡", desc: "Veloce" },
+              { id: "claude-sonnet-4-6",          label: "Sonnet", icon: "🧠", desc: "Più preciso" },
+            ].map(m => (
+              <div key={m.id} onClick={() => setModelChoice(m.id)} style={{
+                flex: 1, padding: "12px 10px", borderRadius: 12, cursor: "pointer",
+                border: `2px solid ${modelChoice === m.id ? C.accent : C.border}`,
+                background: modelChoice === m.id ? C.sky : C.surface,
+                textAlign: "center", transition: "all 0.15s",
+                WebkitTapHighlightColor: "transparent",
+              }}>
+                <div style={{ fontSize: 20, marginBottom: 4 }}>{m.icon}</div>
+                <div style={{ fontSize: 13, fontWeight: "700", color: C.navy }}>{m.label}</div>
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{m.desc}</div>
+              </div>
+            ))}
           </div>
         </div>
 
