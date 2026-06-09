@@ -22,7 +22,7 @@ L'originale `App.jsx` chiamava Anthropic direttamente dal browser usando `VITE_A
 
 - Creata su https://console.anthropic.com → API Keys
 - Nome: `tourist-guide-ai`
-- Valore: `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`
+- Valore: `[REDACTED — non committare chiavi API in chiaro]`
 
 ### 3. GitHub
 
