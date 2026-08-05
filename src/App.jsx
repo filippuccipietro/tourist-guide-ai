@@ -91,186 +91,65 @@ function fmt(s) {
 }
 
 function useTTS() {
-  const [ttsState,        setTtsState]        = useState("idle");
-  const [ttsStopId,       setTtsStopId]       = useState(null);
-  const [ttsError,        setTtsError]        = useState(null);
-  const [lastFailedId,    setLastFailedId]     = useState(null);
-  const [progress,        setProgress]        = useState({ current: 0, duration: 0 });
-  const alive    = useRef(false);
-  const audioEl  = useRef(null);
-  const audioCtx = useRef(null);
+  const [ttsState,     setTtsState]     = useState("idle");
+  const [ttsStopId,    setTtsStopId]    = useState(null);
+  const [ttsError,     setTtsError]     = useState(null);
+  const [lastFailedId, setLastFailedId] = useState(null);
+  const utterRef = useRef(null);
+  // Web Speech API non espone currentTime/duration → stub (la seek bar rimane nascosta)
+  const progress = { current: 0, duration: 0 };
+  const seek = useCallback(() => {}, []);
 
   const cancel = useCallback(() => {
-    alive.current = false;
-    if (audioEl.current) {
-      audioEl.current.pause();
-      audioEl.current.src = "";
-      audioEl.current = null;
-    }
+    window.speechSynthesis.cancel();
+    utterRef.current = null;
     setTtsState("idle");
     setTtsStopId(null);
-    setProgress({ current: 0, duration: 0 });
-    if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "none";
   }, []);
 
-  const seek = useCallback((t) => {
-    if (audioEl.current) {
-      audioEl.current.currentTime = t;
-      setProgress(p => ({ ...p, current: t }));
-    }
-  }, []);
-
-  const speak = useCallback(async (text, sid) => {
-    alive.current = false;
-    if (audioEl.current) {
-      audioEl.current.pause();
-      audioEl.current.src = "";
-      audioEl.current = null;
-    }
-    setProgress({ current: 0, duration: 0 });
+  const speak = useCallback((text, sid) => {
+    window.speechSynthesis.cancel();
+    utterRef.current = null;
     setTtsError(null);
     setLastFailedId(null);
-
-    alive.current = true;
     setTtsState("loading");
     setTtsStopId(sid);
 
-    // ── AudioContext: resume sincrono nel contesto del click utente (prima del fetch) ──
-    try {
-      if (!audioCtx.current || audioCtx.current.state === "closed") {
-        audioCtx.current = new (window.AudioContext || window.webkitAudioContext)();
-      }
-      if (audioCtx.current.state === "suspended") {
-        audioCtx.current.resume(); // fire-and-forget: non await, eseguito nel contesto click
-      }
-    } catch (_) {}
+    const utt = new SpeechSynthesisUtterance(text);
+    utt.lang  = "it-IT";
+    utt.rate  = 0.92;
+    utt.pitch = 1.0;
 
-    // Timeout 15 secondi per evitare il blocco della CTA
-    const controller = new AbortController();
-    const timeoutId  = setTimeout(() => controller.abort(), 15000);
+    // Seleziona voce italiana se disponibile
+    const voices  = window.speechSynthesis.getVoices();
+    const itVoice = voices.find(v => v.lang.startsWith("it"));
+    if (itVoice) utt.voice = itVoice;
 
-    try {
-      const res = await fetch("/api/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
+    utt.onstart  = () => setTtsState("speaking");
+    utt.onpause  = () => setTtsState("paused");
+    utt.onresume = () => setTtsState("speaking");
+    utt.onend    = () => {
+      utterRef.current = null;
+      setTtsState("idle");
+      setTtsStopId(null);
+    };
+    utt.onerror = (e) => {
+      if (e.error === "interrupted" || e.error === "canceled") return;
+      utterRef.current = null;
+      setTtsState("idle");
+      setTtsStopId(null);
+      setTtsError("Audio non disponibile. Riprova.");
+      setLastFailedId(sid);
+    };
 
-      if (!res.ok) throw new Error(`TTS ${res.status}`);
-      if (!alive.current) return;
-
-      const blob = await res.blob();
-      const url  = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audioEl.current = audio;
-
-      // ── AudioContext: connetti solo se già in running state ──
-      try {
-        if (audioCtx.current && audioCtx.current.state === "running") {
-          const src = audioCtx.current.createMediaElementSource(audio);
-          src.connect(audioCtx.current.destination);
-        }
-      } catch (_) {}
-
-      // ── Media Session API: controlli lockscreen ──
-      if ("mediaSession" in navigator) {
-        navigator.mediaSession.metadata = new MediaMetadata({
-          title:  "GuidaMe",
-          artist: "GuidaMe AI",
-          album:  "Itinerario in corso",
-        });
-        navigator.mediaSession.setActionHandler("play",  () => audio.play());
-        navigator.mediaSession.setActionHandler("pause", () => audio.pause());
-        navigator.mediaSession.setActionHandler("stop",  () => cancel());
-        try {
-          navigator.mediaSession.setActionHandler("seekto", (d) => {
-            if (d.seekTime != null) seek(d.seekTime);
-          });
-        } catch (_) {}
-      }
-
-      audio.onplay = () => {
-        if (!alive.current) return;
-        setTtsState("speaking");
-        if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "playing";
-      };
-      audio.onpause = () => {
-        if (!alive.current) return;
-        setTtsState("paused");
-        if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "paused";
-      };
-      audio.onloadedmetadata = () => {
-        setProgress(p => ({ ...p, duration: audio.duration || 0 }));
-        if ("mediaSession" in navigator) {
-          try {
-            navigator.mediaSession.setPositionState({
-              duration: audio.duration || 0,
-              playbackRate: audio.playbackRate,
-              position: audio.currentTime,
-            });
-          } catch (_) {}
-        }
-      };
-      audio.ontimeupdate = () => {
-        if (!alive.current) return;
-        const cur = audio.currentTime;
-        const dur = audio.duration || 0;
-        setProgress({ current: cur, duration: dur });
-        if ("mediaSession" in navigator && dur > 0) {
-          try {
-            navigator.mediaSession.setPositionState({
-              duration: dur, playbackRate: audio.playbackRate, position: cur,
-            });
-          } catch (_) {}
-        }
-      };
-      audio.onended = () => {
-        URL.revokeObjectURL(url);
-        if (alive.current) {
-          alive.current = false;
-          setTtsState("idle");
-          setTtsStopId(null);
-          setProgress({ current: 0, duration: 0 });
-          if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "none";
-        }
-      };
-      audio.onerror = () => {
-        URL.revokeObjectURL(url);
-        if (alive.current) {
-          alive.current = false;
-          setTtsState("idle");
-          setTtsStopId(null);
-          setProgress({ current: 0, duration: 0 });
-          setTtsError("Errore nella riproduzione.");
-          setLastFailedId(sid);
-        }
-      };
-
-      await audio.play();
-    } catch (e) {
-      clearTimeout(timeoutId);
-      if (alive.current) {
-        alive.current = false;
-        setTtsState("idle");
-        setTtsStopId(null);
-        setProgress({ current: 0, duration: 0 });
-        setTtsError(e.name === "AbortError"
-          ? "Timeout: audio non disponibile. Riprova."
-          : `Audio non disponibile [${e.name}: ${e.message}]. Riprova.`);
-        setLastFailedId(sid);
-      }
-    }
-  }, [cancel, seek]);
-
-  const pause  = useCallback(() => { audioEl.current?.pause(); }, []);
-  const resume = useCallback(() => { audioEl.current?.play(); }, []);
-
-  useEffect(() => () => {
-    alive.current = false;
-    audioEl.current?.pause();
+    utterRef.current = utt;
+    window.speechSynthesis.speak(utt);
   }, []);
+
+  const pause  = useCallback(() => { window.speechSynthesis.pause();  }, []);
+  const resume = useCallback(() => { window.speechSynthesis.resume(); }, []);
+
+  useEffect(() => () => { window.speechSynthesis.cancel(); }, []);
 
   return { ttsState, ttsStopId, ttsError, lastFailedId, speak, pause, resume, stop: cancel, progress, seek };
 }
