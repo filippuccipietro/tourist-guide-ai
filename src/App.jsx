@@ -1100,11 +1100,34 @@ function SocialKitSection({ stop, kit, loading, onLoad }) {
 
 // ─── ROAD TRIP ────────────────────────────────────────────────────
 function RoadTripScreen({ onBack, onSaveTrip }) {
-  const [from,  setFrom]  = useState("");
-  const [to,    setTo]    = useState("");
-  const [phase, setPhase] = useState("input"); // "input" | "generating" | "results"
-  const [trip,  setTrip]  = useState(null);
-  const [error, setError] = useState("");
+  const [from,        setFrom]        = useState("");
+  const [to,          setTo]          = useState("");
+  const [phase,       setPhase]       = useState("input"); // "input" | "generating" | "results"
+  const [trip,        setTrip]        = useState(null);
+  const [error,       setError]       = useState("");
+  const [expandedIds, setExpandedIds] = useState({});   // id → bool
+  const [details,     setDetails]     = useState({});    // id → { loading, text, error }
+  const tts = useTTS();
+
+  const expandStop = async (h) => {
+    const id = h.id ?? h.name;
+    if (expandedIds[id]) {
+      tts.stop();
+      setExpandedIds(p => ({ ...p, [id]: false }));
+      return;
+    }
+    setExpandedIds(p => ({ ...p, [id]: true }));
+    if (details[id]?.text) return; // già caricato
+    setDetails(p => ({ ...p, [id]: { loading: true, text: null, error: null } }));
+    try {
+      const sys = "Sei una guida turistica esperta italiana. Scrivi solo testo, zero markdown, zero asterischi.";
+      const msg = `Scrivi una descrizione approfondita di "${h.name}" (tipo: ${h.type}) adatta a un'audioguida professionale, in italiano, in 3-4 paragrafi (180-220 parole totali). Includi: cosa rende speciale il posto e la sua storia, cosa vedere e fare concretamente, una curiosità o aneddoto, un consiglio pratico per i visitatori. Stile narrativo e coinvolgente.`;
+      const text = await callClaude([{ role: "user", content: msg }], sys, "claude-haiku-4-5-20251001");
+      setDetails(p => ({ ...p, [id]: { loading: false, text, error: null } }));
+    } catch {
+      setDetails(p => ({ ...p, [id]: { loading: false, text: null, error: "Errore nel caricamento. Tocca di nuovo." } }));
+    }
+  };
 
   const generate = async () => {
     if (!from.trim() || !to.trim()) return;
@@ -1257,13 +1280,54 @@ REGOLE TASSATIVE:
               </div>
             )}
 
-            <a
-              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(h.name + " " + (trip.to || ""))}`}
-              target="_blank" rel="noopener noreferrer"
-              style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, color: "#1a73e8", fontWeight: "600", textDecoration: "none" }}
-            >
-              🗺️ Vedi su Maps
-            </a>
+            {/* Maps + Expand row */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(h.name + " " + (trip.to || ""))}`}
+                target="_blank" rel="noopener noreferrer"
+                style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, color: "#1a73e8", fontWeight: "600", textDecoration: "none" }}
+              >
+                🗺️ Vedi su Maps
+              </a>
+              <button
+                onClick={() => expandStop(h)}
+                style={{
+                  background: expandedIds[h.id ?? h.name] ? C.border : C.sky,
+                  color: C.navy, border: "none", borderRadius: 50,
+                  padding: "6px 14px", fontSize: 12, fontWeight: "700",
+                  cursor: "pointer", fontFamily: FONT,
+                }}
+              >
+                {expandedIds[h.id ?? h.name] ? "▲ Meno" : "📖 Scopri di più"}
+              </button>
+            </div>
+
+            {/* Expanded section */}
+            {expandedIds[h.id ?? h.name] && (
+              <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1.5px solid ${C.border}` }}>
+                {details[h.id ?? h.name]?.loading ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, color: C.muted, fontSize: 13, padding: "8px 0" }}>
+                    <Spinner small /> Caricamento descrizione…
+                  </div>
+                ) : details[h.id ?? h.name]?.error ? (
+                  <div style={{ color: C.red, fontSize: 13, padding: "8px 0" }}>
+                    {details[h.id ?? h.name].error}
+                  </div>
+                ) : details[h.id ?? h.name]?.text ? (
+                  <>
+                    <div style={{ fontSize: 14, color: C.navy, lineHeight: 1.75, marginBottom: 14, whiteSpace: "pre-wrap" }}>
+                      {details[h.id ?? h.name].text}
+                    </div>
+                    <TTSPlayer
+                      text={details[h.id ?? h.name].text}
+                      stopId={`rt-${h.id ?? h.name}`}
+                      label={h.name}
+                      tts={tts}
+                    />
+                  </>
+                ) : null}
+              </div>
+            )}
           </div>
         ))}
 
