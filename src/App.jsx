@@ -785,6 +785,7 @@ function WelcomeScreen({ onNext, onOpenMyTrips, onRoadTrip }) {
   }, [onNext]);
 
   return (
+    <>
     <div style={{ ...rootStyle, display: "flex", flexDirection: "column", justifyContent: "center", padding: "24px 20px 96px", minHeight: "100vh" }}>
       <div style={{ textAlign: "center", marginBottom: 44 }}>
         <div style={{
@@ -843,6 +844,7 @@ function WelcomeScreen({ onNext, onOpenMyTrips, onRoadTrip }) {
       </button>
     </div>
     <BottomNav active="home" onHome={() => {}} onMyTrips={onOpenMyTrips} />
+    </>
   );
 }
 
@@ -2251,5 +2253,5 @@ Restituisci SOLO questo JSON:
     </div>
   );
 
-  return null;
+  }eturn null;
 }
