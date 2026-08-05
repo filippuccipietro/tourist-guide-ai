@@ -2252,6 +2252,4 @@ Restituisci SOLO questo JSON:
       </div>
     </div>
   );
-
-  }eturn null;
 }
