@@ -516,7 +516,7 @@ function TravelSegment({ travel }) {
 }
 
 // ─── WELCOME ──────────────────────────────────────────────────────
-function WelcomeScreen({ onNext, savedCount, onOpenSaved }) {
+function WelcomeScreen({ onNext, savedCount, onOpenSaved, onRoadTrip }) {
   const inputRef = useRef(null);
   const go = useCallback(() => {
     const v = inputRef.current?.value?.trim();
@@ -569,6 +569,17 @@ function WelcomeScreen({ onNext, savedCount, onOpenSaved }) {
         }}
       />
       <AccentBtn onClick={go}>Inizia →</AccentBtn>
+      <button onClick={onRoadTrip} style={{
+        marginTop: 12, width: "100%", background: "transparent",
+        border: `1.5px solid ${C.navy}30`, borderRadius: 50, padding: "14px 20px",
+        fontSize: 14, fontWeight: "600", fontFamily: FONT,
+        cursor: "pointer", color: C.navy, letterSpacing: "0.01em",
+        display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+        WebkitTapHighlightColor: "transparent",
+      }}>
+        <span>🚗</span>
+        <span>Voglio fare un viaggio on the road</span>
+      </button>
       {savedCount > 0 && (
         <button onClick={onOpenSaved} style={{
           marginTop: 14, width: "100%", background: "transparent",
@@ -956,6 +967,258 @@ function SocialKitSection({ stop, kit, loading, onLoad }) {
   );
 }
 
+// ─── ROAD TRIP ────────────────────────────────────────────────────
+function RoadTripScreen({ onBack }) {
+  const [from,  setFrom]  = useState("");
+  const [to,    setTo]    = useState("");
+  const [phase, setPhase] = useState("input"); // "input" | "generating" | "results"
+  const [trip,  setTrip]  = useState(null);
+  const [error, setError] = useState("");
+
+  const generate = async () => {
+    if (!from.trim() || !to.trim()) return;
+    setPhase("generating"); setError("");
+    try {
+      const sys = "Sei un esperto di viaggi on the road in Italia. Rispondi SOLO con JSON valido, zero markdown.";
+      const msg = `Pianifica un viaggio on the road in auto da "${from.trim()}" a "${to.trim()}".
+
+Restituisci SOLO questo JSON:
+{
+  "from": "${from.trim()}",
+  "to": "${to.trim()}",
+  "route_name": "Nome evocativo del percorso (es. 'La Via Emilia', 'Costa Tirrenica')",
+  "total_km": 0,
+  "total_h": 0,
+  "tagline": "Una frase autentica che cattura l'essenza di questo viaggio, concreta non retorica",
+  "highlights": [
+    {
+      "id": 1,
+      "name": "Nome del luogo",
+      "type": "città|borgo|monumento|parco|museo|spiaggia|lago|montagna|altro",
+      "emoji": "🏛️",
+      "shortDesc": "1-2 frasi su cosa rende speciale questo posto e perché vale fermarsi",
+      "on_route": true,
+      "deviation_km": 0,
+      "deviation_min": 0,
+      "km_from_start": 0,
+      "stop_duration_min": 30
+    }
+  ],
+  "travel_tip": "Un consiglio pratico specifico per questo percorso (pausa pranzo, strada panoramica, orario migliore)"
+}
+
+REGOLE TASSATIVE:
+- Includi 6-10 attrazioni ordinate per km_from_start crescente (dal punto di partenza).
+- on_route: true = attrazione sulla via principale o deviazione ≤ 2 km (deviation_km e deviation_min = 0).
+- on_route: false = deviazione > 2 km (deviation_km e deviation_min stimano andata+ritorno).
+- km_from_start è la distanza dal punto di partenza lungo la strada principale.
+- stop_duration_min è il tempo minimo consigliato per la sosta.
+- Scegli emoji appropriate al tipo di luogo.`;
+
+      const raw = await callClaude([{ role: "user", content: msg }], sys, "claude-haiku-4-5-20251001");
+      setTrip(JSON.parse(raw.replace(/```json|```/g, "").trim()));
+      setPhase("results");
+    } catch {
+      setError("Errore nella generazione. Riprova.");
+      setPhase("input");
+    }
+  };
+
+  if (phase === "generating") return (
+    <div style={{ ...rootStyle, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", padding: "24px" }}>
+      <Spinner />
+      <div style={{ fontSize: 40, margin: "22px 0 12px" }}>🚗</div>
+      <div style={{ color: C.navy, fontSize: 16, fontWeight: "700", textAlign: "center", lineHeight: 1.7, fontFamily: FONT_HEADING }}>
+        Sto pianificando il percorso…
+      </div>
+      <div style={{ color: C.muted, fontSize: 14, textAlign: "center", lineHeight: 1.7, marginTop: 6 }}>
+        Cerco le attrazioni lungo la strada.<br/>
+        <span style={{ color: C.accent, fontWeight: "600" }}>Un momento.</span>
+      </div>
+    </div>
+  );
+
+  if (phase === "results" && trip) return (
+    <div style={rootStyle}>
+      <Header label={trip.route_name || `${trip.from} → ${trip.to}`} />
+      <div style={{ padding: "0 20px 40px" }}>
+
+        {/* Route header */}
+        <div style={{
+          background: C.navy, borderRadius: 20, padding: "20px 20px 18px",
+          marginBottom: 20, color: "#fff",
+        }}>
+          <div style={{ fontSize: 12, opacity: 0.65, marginBottom: 6, letterSpacing: "0.05em", textTransform: "uppercase", fontWeight: "600" }}>
+            🚗 {trip.from} → {trip.to}
+          </div>
+          <div style={{ fontFamily: FONT_HEADING, fontSize: 17, fontWeight: "700", lineHeight: 1.4, marginBottom: 14, fontStyle: "italic", opacity: 0.9 }}>
+            "{trip.tagline}"
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {trip.total_km > 0 && (
+              <span style={{ background: "rgba(255,255,255,0.15)", borderRadius: 50, padding: "5px 12px", fontSize: 12, fontWeight: "600" }}>
+                📍 ~{trip.total_km} km
+              </span>
+            )}
+            {trip.total_h > 0 && (
+              <span style={{ background: "rgba(255,255,255,0.15)", borderRadius: 50, padding: "5px 12px", fontSize: 12, fontWeight: "600" }}>
+                ⏱ ~{trip.total_h}h di guida
+              </span>
+            )}
+            {trip.highlights?.length > 0 && (
+              <span style={{ background: "rgba(255,255,255,0.15)", borderRadius: 50, padding: "5px 12px", fontSize: 12, fontWeight: "600" }}>
+                📌 {trip.highlights.length} attrazioni
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Attraction cards */}
+        {trip.highlights?.map((h, i) => (
+          <div key={h.id ?? i} style={{
+            background: C.surface, border: `1.5px solid ${C.border}`,
+            borderRadius: 16, padding: "16px", marginBottom: 12,
+            boxShadow: "0 2px 8px rgba(28,43,74,0.06)",
+          }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10, gap: 8 }}>
+              <span style={{
+                display: "inline-flex", alignItems: "center", gap: 5, flexShrink: 0,
+                background: h.on_route ? "#DCFCE7" : "#FEF9C3",
+                color: h.on_route ? "#166534" : "#854D0E",
+                borderRadius: 50, padding: "4px 10px",
+                fontSize: 11, fontWeight: "700",
+              }}>
+                {h.on_route
+                  ? "✓ Sulla via"
+                  : `↗ Deviazione ~${h.deviation_min} min · ${h.deviation_km} km`}
+              </span>
+              {h.km_from_start > 0 && (
+                <span style={{ fontSize: 11, color: C.muted, fontWeight: "600", whiteSpace: "nowrap" }}>
+                  km {h.km_from_start}
+                </span>
+              )}
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <span style={{ fontSize: 24, lineHeight: 1 }}>{h.emoji || "📍"}</span>
+              <div style={{ fontFamily: FONT_HEADING, fontSize: 17, fontWeight: "700", color: C.navy }}>
+                {h.name}
+              </div>
+            </div>
+
+            <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.65, marginBottom: h.stop_duration_min ? 10 : 0 }}>
+              {h.shortDesc}
+            </div>
+
+            {h.stop_duration_min > 0 && (
+              <div style={{ fontSize: 12, color: C.dim, display: "flex", alignItems: "center", gap: 4, marginBottom: 10 }}>
+                ⏱ Sosta: {h.stop_duration_min < 60 ? `${h.stop_duration_min} min` : `${Math.round(h.stop_duration_min / 60 * 10) / 10}h`}
+              </div>
+            )}
+
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(h.name + " " + (trip.to || ""))}`}
+              target="_blank" rel="noopener noreferrer"
+              style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, color: "#1a73e8", fontWeight: "600", textDecoration: "none" }}
+            >
+              🗺️ Vedi su Maps
+            </a>
+          </div>
+        ))}
+
+        {/* Travel tip */}
+        {trip.travel_tip && (
+          <div style={{
+            background: C.sky, border: `1.5px solid ${C.travelB}`,
+            borderRadius: 14, padding: "14px 16px", marginBottom: 20,
+          }}>
+            <div style={{ fontSize: 11, fontWeight: "700", color: C.accent, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              💡 Consiglio
+            </div>
+            <div style={{ fontSize: 13, color: C.navy, lineHeight: 1.65 }}>
+              {trip.travel_tip}
+            </div>
+          </div>
+        )}
+
+        <button onClick={() => setPhase("input")} style={{
+          width: "100%", background: C.accent, color: "#fff", border: "none",
+          borderRadius: 50, padding: "16px 20px", fontSize: 15, fontWeight: "700",
+          fontFamily: FONT, cursor: "pointer", marginBottom: 10,
+        }}>
+          🚗 Nuovo percorso
+        </button>
+        <OutlineBtn onClick={onBack}>← Torna alla home</OutlineBtn>
+      </div>
+    </div>
+  );
+
+  // ── INPUT phase ──────────────────────────────────────────────────
+  return (
+    <div style={{ ...rootStyle, padding: "0", minHeight: "100vh" }}>
+      <Header label="Viaggio on the road" />
+      <div style={{ padding: "20px 20px 40px" }}>
+
+        <div style={{ textAlign: "center", marginBottom: 28 }}>
+          <div style={{
+            width: 72, height: 72, borderRadius: "50%",
+            background: C.navy, margin: "8px auto 16px",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 32, boxShadow: `0 8px 24px ${C.navy}40`,
+          }}>🚗</div>
+          <h2 style={{ fontSize: 22, fontWeight: "800", margin: "0 0 8px", color: C.navy, fontFamily: FONT_HEADING }}>
+            Dove vuoi andare?
+          </h2>
+          <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.55, margin: 0 }}>
+            Inserisci partenza e destinazione. Troveremo le attrazioni lungo la strada con le deviazioni stimate.
+          </p>
+        </div>
+
+        <label style={{ fontSize: 12, color: C.navy, fontWeight: "700", letterSpacing: "0.05em", textTransform: "uppercase", display: "block", marginBottom: 8 }}>
+          Parto da
+        </label>
+        <input
+          type="text" value={from} onChange={e => setFrom(e.target.value)}
+          placeholder="es. Milano, Roma, Firenze…"
+          onKeyDown={e => e.key === "Enter" && generate()}
+          style={{
+            width: "100%", background: C.surface, border: `2px solid ${C.border}`,
+            borderRadius: 14, padding: "15px 18px", color: C.navy, fontSize: 16,
+            fontFamily: FONT, outline: "none", boxSizing: "border-box", marginBottom: 16,
+            boxShadow: "0 2px 8px rgba(28,43,74,0.06)",
+          }}
+        />
+
+        <label style={{ fontSize: 12, color: C.navy, fontWeight: "700", letterSpacing: "0.05em", textTransform: "uppercase", display: "block", marginBottom: 8 }}>
+          Vado a
+        </label>
+        <input
+          type="text" value={to} onChange={e => setTo(e.target.value)}
+          placeholder="es. Napoli, Venezia, Palermo…"
+          onKeyDown={e => e.key === "Enter" && generate()}
+          style={{
+            width: "100%", background: C.surface, border: `2px solid ${C.border}`,
+            borderRadius: 14, padding: "15px 18px", color: C.navy, fontSize: 16,
+            fontFamily: FONT, outline: "none", boxSizing: "border-box", marginBottom: 24,
+            boxShadow: "0 2px 8px rgba(28,43,74,0.06)",
+          }}
+        />
+
+        {error && (
+          <div style={{ color: C.red, fontSize: 13, marginBottom: 14, padding: "10px 14px", background: "#FEF2F2", borderRadius: 10, border: "1px solid #FCA5A5" }}>
+            {error}
+          </div>
+        )}
+
+        <AccentBtn onClick={generate} disabled={!from.trim() || !to.trim()}>
+          Pianifica il percorso →
+        </AccentBtn>
+        <OutlineBtn onClick={onBack}>← Torna alla home</OutlineBtn>
+      </div>
+    </div>
+  );
+}
+
 // ─── MAIN APP ─────────────────────────────────────────────────────
 export default function App() {
   const [screen,       setScreen]       = useState("welcome");
@@ -1225,7 +1488,12 @@ Restituisci SOLO questo JSON:
       onNext={c => { setCity(c); setScreen("startpoint"); }}
       savedCount={saved.length}
       onOpenSaved={() => setScreen("saved")}
+      onRoadTrip={() => setScreen("roadtrip")}
     />
+  );
+
+  if (screen === "roadtrip") return (
+    <RoadTripScreen onBack={() => setScreen("welcome")} />
   );
 
   if (screen === "saved") return (
