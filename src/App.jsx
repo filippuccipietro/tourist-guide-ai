@@ -461,6 +461,267 @@ function Spinner({ small }) {
   );
 }
 
+
+// ─── BOTTOM NAV ────────────────────────────────────────────────────
+function BottomNav({ active, onHome, onMyTrips }) {
+  const tabs = [
+    { id: "home",    icon: "🧭", label: "Esplora",       onClick: onHome },
+    { id: "mytrips", icon: "🗺️", label: "I miei viaggi", onClick: onMyTrips },
+  ];
+  return (
+    <div style={{
+      position: "fixed", bottom: 0, left: "50%",
+      transform: "translateX(-50%)",
+      width: "100%", maxWidth: 480,
+      background: C.surface,
+      borderTop: `1px solid ${C.border}`,
+      display: "flex", zIndex: 200,
+      boxShadow: "0 -4px 16px rgba(28,43,74,0.08)",
+    }}>
+      {tabs.map(tab => (
+        <div key={tab.id} onClick={tab.onClick} style={{
+          flex: 1, padding: "10px 8px 14px",
+          display: "flex", flexDirection: "column", alignItems: "center",
+          gap: 3, cursor: "pointer",
+          WebkitTapHighlightColor: "transparent",
+          color: active === tab.id ? C.accent : C.muted,
+          transition: "color 0.15s",
+        }}>
+          <span style={{ fontSize: 22, lineHeight: 1 }}>{tab.icon}</span>
+          <span style={{ fontSize: 10, fontWeight: active === tab.id ? "700" : "500", letterSpacing: "0.02em" }}>
+            {tab.label}
+          </span>
+          {active === tab.id && (
+            <div style={{ width: 20, height: 2, background: C.accent, borderRadius: 2, marginTop: 1 }}/>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── MY TRIPS SCREEN ───────────────────────────────────────────────
+function MyTripsScreen({ saved, onLoad, onDelete, onHome }) {
+  const [activeId, setActiveId] = useState(saved.length > 0 ? saved[0].id : null);
+
+  // Se il tab attivo viene cancellato, seleziona il primo disponibile
+  const handleDelete = (id) => {
+    onDelete(id);
+    if (activeId === id) {
+      const remaining = saved.filter(e => e.id !== id);
+      setActiveId(remaining.length > 0 ? remaining[0].id : null);
+    }
+  };
+
+  const active = saved.find(e => e.id === activeId);
+
+  return (
+    <div style={{ ...rootStyle, paddingBottom: 70 }}>
+      <Header label="I miei viaggi" />
+
+      {saved.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "64px 20px 40px", color: C.muted }}>
+          <div style={{ fontSize: 52, marginBottom: 16 }}>🗺️</div>
+          <div style={{ fontSize: 18, fontWeight: "800", color: C.navy, marginBottom: 10, fontFamily: FONT_HEADING }}>
+            Nessun viaggio salvato
+          </div>
+          <div style={{ fontSize: 14, lineHeight: 1.65 }}>
+            Genera un itinerario o un percorso on the road:<br/>lo troverai qui automaticamente.
+          </div>
+          <div style={{ marginTop: 28 }}>
+            <AccentBtn onClick={onHome}>Crea il tuo primo itinerario →</AccentBtn>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* ── Tab bar orizzontale ── */}
+          <div style={{
+            display: "flex", overflowX: "auto", gap: 8,
+            padding: "14px 20px 14px",
+            borderBottom: `1px solid ${C.border}`,
+            WebkitOverflowScrolling: "touch",
+            scrollbarWidth: "none", msOverflowStyle: "none",
+          }}>
+            {saved.map(entry => {
+              const isActive = activeId === entry.id;
+              const isRoad   = entry.type === "roadtrip";
+              const label    = isRoad ? `🚗 ${entry.from} → ${entry.to}` : `🧭 ${entry.city}`;
+              return (
+                <div key={entry.id} style={{
+                  display: "inline-flex", alignItems: "center", gap: 7,
+                  flexShrink: 0,
+                  background: isActive ? C.accent : C.surface,
+                  border: `1.5px solid ${isActive ? C.accent : C.border}`,
+                  borderRadius: 50, padding: "8px 10px 8px 14px",
+                  cursor: "pointer", transition: "all 0.15s",
+                  boxShadow: isActive ? `0 4px 12px ${C.accent}30` : "none",
+                }} onClick={() => setActiveId(entry.id)}>
+                  <span style={{
+                    fontSize: 13, fontWeight: isActive ? "700" : "500",
+                    color: isActive ? "#fff" : C.navy,
+                    whiteSpace: "nowrap", maxWidth: 130,
+                    overflow: "hidden", textOverflow: "ellipsis",
+                  }}>{label}</span>
+                  {/* Icona elimina */}
+                  <span onClick={e => { e.stopPropagation(); handleDelete(entry.id); }} style={{
+                    width: 20, height: 20, borderRadius: "50%", flexShrink: 0,
+                    background: isActive ? "rgba(255,255,255,0.28)" : C.border,
+                    color: isActive ? "#fff" : C.muted,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 10, fontWeight: "800", cursor: "pointer",
+                    lineHeight: 1,
+                  }}>✕</span>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* ── Contenuto del tab attivo ── */}
+          {active && (
+            <div style={{ padding: "20px", paddingBottom: 32 }}>
+              {active.type === "roadtrip" ? (
+                /* ROAD TRIP */
+                <div>
+                  <div style={{
+                    background: C.navy, borderRadius: 20, padding: "20px 20px 18px",
+                    color: "#fff", marginBottom: 16,
+                    boxShadow: `0 6px 20px rgba(28,43,74,0.2)`,
+                  }}>
+                    <div style={{ fontSize: 11, opacity: 0.6, marginBottom: 6, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: "600" }}>
+                      🚗 {active.from} → {active.to}
+                    </div>
+                    {active.trip?.route_name && (
+                      <div style={{ fontFamily: FONT_HEADING, fontSize: 20, fontWeight: "700", marginBottom: 8 }}>
+                        {active.trip.route_name}
+                      </div>
+                    )}
+                    {active.trip?.tagline && (
+                      <div style={{ fontSize: 13, opacity: 0.8, fontStyle: "italic", lineHeight: 1.55, marginBottom: 14 }}>
+                        "{active.trip.tagline}"
+                      </div>
+                    )}
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+                      {active.trip?.total_km > 0 && (
+                        <span style={{ background: "rgba(255,255,255,0.15)", borderRadius: 50, padding: "4px 12px", fontSize: 12, fontWeight: "600" }}>
+                          📍 ~{active.trip.total_km} km
+                        </span>
+                      )}
+                      {active.trip?.total_h > 0 && (
+                        <span style={{ background: "rgba(255,255,255,0.15)", borderRadius: 50, padding: "4px 12px", fontSize: 12, fontWeight: "600" }}>
+                          ⏱ ~{active.trip.total_h}h di guida
+                        </span>
+                      )}
+                      {active.trip?.highlights?.length > 0 && (
+                        <span style={{ background: "rgba(255,255,255,0.15)", borderRadius: 50, padding: "4px 12px", fontSize: 12, fontWeight: "600" }}>
+                          📌 {active.trip.highlights.length} attrazioni
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 11, opacity: 0.5 }}>
+                      Salvato il {new Date(active.savedAt).toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" })}
+                    </div>
+                  </div>
+                  {active.trip?.highlights?.map((h, i) => (
+                    <div key={i} style={{
+                      background: C.surface, border: `1.5px solid ${C.border}`,
+                      borderRadius: 14, padding: "14px 16px", marginBottom: 10,
+                      boxShadow: "0 1px 6px rgba(28,43,74,0.06)",
+                    }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                        <span style={{ fontSize: 20, lineHeight: 1 }}>{h.emoji || "📍"}</span>
+                        <div style={{ fontFamily: FONT_HEADING, fontSize: 15, fontWeight: "700", color: C.navy, flex: 1 }}>{h.name}</div>
+                        <span style={{
+                          background: h.on_route ? "#DCFCE7" : "#FEF9C3",
+                          color: h.on_route ? "#166534" : "#854D0E",
+                          borderRadius: 50, padding: "3px 9px",
+                          fontSize: 10, fontWeight: "700", flexShrink: 0,
+                        }}>
+                          {h.on_route ? "✓ Via" : `↗ ${h.deviation_min}min`}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6 }}>{h.shortDesc}</div>
+                    </div>
+                  ))}
+                  {active.trip?.travel_tip && (
+                    <div style={{
+                      background: C.sky, border: `1.5px solid ${C.travelB}`,
+                      borderRadius: 14, padding: "14px 16px", marginTop: 4,
+                    }}>
+                      <div style={{ fontSize: 11, fontWeight: "700", color: C.accent, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                        💡 Consiglio
+                      </div>
+                      <div style={{ fontSize: 13, color: C.navy, lineHeight: 1.65 }}>{active.trip.travel_tip}</div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* CITY ITINERARY */
+                <div>
+                  <div style={{
+                    background: C.navy, borderRadius: 20, padding: "20px 20px 18px",
+                    color: "#fff", marginBottom: 16,
+                    boxShadow: `0 6px 20px rgba(28,43,74,0.2)`,
+                  }}>
+                    <div style={{ fontFamily: FONT_HEADING, fontSize: 24, fontWeight: "800", marginBottom: 6 }}>
+                      {active.city}
+                    </div>
+                    {active.itinerary?.tagline && (
+                      <div style={{ fontSize: 13, opacity: 0.8, fontStyle: "italic", lineHeight: 1.55, marginBottom: 14 }}>
+                        "{active.itinerary.tagline}"
+                      </div>
+                    )}
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+                      <span style={{ background: "rgba(255,255,255,0.15)", borderRadius: 50, padding: "4px 12px", fontSize: 12, fontWeight: "600" }}>
+                        ⏱ {active.duration}
+                      </span>
+                      <span style={{ background: "rgba(255,255,255,0.15)", borderRadius: 50, padding: "4px 12px", fontSize: 12, fontWeight: "600" }}>
+                        📍 {active.itinerary?.stops?.length} tappe
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 11, opacity: 0.5, marginBottom: 14 }}>
+                      Salvato il {new Date(active.savedAt).toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" })}
+                    </div>
+                    <button onClick={() => onLoad(active)} style={{
+                      width: "100%", background: "rgba(255,255,255,0.18)",
+                      border: "1.5px solid rgba(255,255,255,0.4)",
+                      borderRadius: 50, padding: "13px 16px",
+                      fontSize: 14, fontWeight: "700", color: "#fff",
+                      fontFamily: FONT, cursor: "pointer",
+                    }}>
+                      Apri itinerario completo →
+                    </button>
+                  </div>
+                  {active.itinerary?.stops?.map((stop, i) => (
+                    <div key={i} style={{
+                      background: C.surface, border: `1.5px solid ${C.border}`,
+                      borderRadius: 14, padding: "14px 16px", marginBottom: 8,
+                      display: "flex", alignItems: "center", gap: 12,
+                      boxShadow: "0 1px 6px rgba(28,43,74,0.06)",
+                    }}>
+                      <div style={{
+                        width: 32, height: 32, borderRadius: "50%",
+                        background: C.navy, color: "#fff",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 13, fontWeight: "700", flexShrink: 0,
+                      }}>{i + 1}</div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 14, fontWeight: "700", color: C.navy }}>{stop.name}</div>
+                        <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{stop.type} · {stop.duration_min} min</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      <BottomNav active="mytrips" onHome={onHome} onMyTrips={() => {}} />
+    </div>
+  );
+}
+
 // ─── TRAVEL SEGMENT ───────────────────────────────────────────────
 function TravelSegment({ travel }) {
   if (!travel) return null;
@@ -516,7 +777,7 @@ function TravelSegment({ travel }) {
 }
 
 // ─── WELCOME ──────────────────────────────────────────────────────
-function WelcomeScreen({ onNext, savedCount, onOpenSaved, onRoadTrip }) {
+function WelcomeScreen({ onNext, onOpenMyTrips, onRoadTrip }) {
   const inputRef = useRef(null);
   const go = useCallback(() => {
     const v = inputRef.current?.value?.trim();
@@ -524,7 +785,7 @@ function WelcomeScreen({ onNext, savedCount, onOpenSaved, onRoadTrip }) {
   }, [onNext]);
 
   return (
-    <div style={{ ...rootStyle, display: "flex", flexDirection: "column", justifyContent: "center", padding: "24px 20px", minHeight: "100vh" }}>
+    <div style={{ ...rootStyle, display: "flex", flexDirection: "column", justifyContent: "center", padding: "24px 20px 96px", minHeight: "100vh" }}>
       <div style={{ textAlign: "center", marginBottom: 44 }}>
         <div style={{
           width: 80, height: 80, borderRadius: "50%",
@@ -580,19 +841,8 @@ function WelcomeScreen({ onNext, savedCount, onOpenSaved, onRoadTrip }) {
         <span>🚗</span>
         <span>Voglio fare un viaggio on the road</span>
       </button>
-      {savedCount > 0 && (
-        <button onClick={onOpenSaved} style={{
-          marginTop: 14, width: "100%", background: "transparent",
-          border: `1.5px solid ${C.navy}`, borderRadius: 50, padding: "14px 20px",
-          fontSize: 14, fontWeight: "600", fontFamily: FONT,
-          cursor: "pointer", color: C.navy, letterSpacing: "0.01em",
-          display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-        }}>
-          <span>📂</span>
-          <span>Itinerari salvati ({savedCount})</span>
-        </button>
-      )}
     </div>
+    <BottomNav active="home" onHome={() => {}} onMyTrips={onOpenMyTrips} />
   );
 }
 
@@ -968,7 +1218,7 @@ function SocialKitSection({ stop, kit, loading, onLoad }) {
 }
 
 // ─── ROAD TRIP ────────────────────────────────────────────────────
-function RoadTripScreen({ onBack }) {
+function RoadTripScreen({ onBack, onSaveTrip }) {
   const [from,  setFrom]  = useState("");
   const [to,    setTo]    = useState("");
   const [phase, setPhase] = useState("input"); // "input" | "generating" | "results"
@@ -1016,8 +1266,18 @@ REGOLE TASSATIVE:
 - Scegli emoji appropriate al tipo di luogo.`;
 
       const raw = await callClaude([{ role: "user", content: msg }], sys, "claude-haiku-4-5-20251001");
-      setTrip(JSON.parse(raw.replace(/```json|```/g, "").trim()));
+      const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
+      setTrip(parsed);
       setPhase("results");
+      // Auto-save in "I miei viaggi"
+      if (onSaveTrip) {
+        onSaveTrip({
+          id: Date.now(), savedAt: new Date().toISOString(),
+          type: "roadtrip",
+          from: from.trim(), to: to.trim(),
+          trip: parsed,
+        });
+      }
     } catch {
       setError("Errore nella generazione. Riprova.");
       setPhase("input");
@@ -1306,6 +1566,15 @@ export default function App() {
     persistSaved(updated);
   };
 
+  // ── Salva voce in "I miei viaggi" (usato da auto-save e road trip) ─
+  const saveTrip = (entry) => {
+    setSaved(prev => {
+      const updated = [entry, ...prev].slice(0, 30);
+      persistSaved(updated);
+      return updated;
+    });
+  };
+
   // ── Genera itinerario ─────────────────────────────────────────
   const generate = async () => {
     setScreen("generating"); setError("");
@@ -1382,7 +1651,21 @@ REGOLE:
 - Se distanza > 1km suggerisci taxi o bus come mode_suggestion.`;
 
       const raw = await callClaude([{ role: "user", content: msg }], sys, modelChoice);
-      setItinerary(JSON.parse(raw.replace(/```json|```/g, "").trim()));
+      const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
+      setItinerary(parsed);
+      // Auto-save in "I miei viaggi"
+      const autoEntry = {
+        id: Date.now(), savedAt: new Date().toISOString(),
+        type: "city", city, duration, pace, interests,
+        itinerary: parsed, stopDetails: {},
+      };
+      setSaved(prev => {
+        const updated = [autoEntry, ...prev].slice(0, 30);
+        persistSaved(updated);
+        return updated;
+      });
+      setSaveMsg("✓ Salvato in I miei viaggi");
+      setTimeout(() => setSaveMsg(""), 2500);
       setScreen("itinerary");
     } catch (e) {
       setError("Errore nella generazione. Riprova.");
@@ -1486,22 +1769,21 @@ Restituisci SOLO questo JSON:
   if (screen === "welcome") return (
     <WelcomeScreen
       onNext={c => { setCity(c); setScreen("startpoint"); }}
-      savedCount={saved.length}
-      onOpenSaved={() => setScreen("saved")}
+      onOpenMyTrips={() => setScreen("mytrips")}
       onRoadTrip={() => setScreen("roadtrip")}
     />
   );
 
   if (screen === "roadtrip") return (
-    <RoadTripScreen onBack={() => setScreen("welcome")} />
+    <RoadTripScreen onBack={() => setScreen("welcome")} onSaveTrip={saveTrip} />
   );
 
-  if (screen === "saved") return (
-    <SavedScreen
+  if (screen === "mytrips") return (
+    <MyTripsScreen
       saved={saved}
       onLoad={loadSaved}
       onDelete={deleteSaved}
-      onBack={() => setScreen("welcome")}
+      onHome={() => setScreen("welcome")}
     />
   );
 
@@ -1724,17 +2006,6 @@ Restituisci SOLO questo JSON:
               }}>{b}</span>
             ))}
           </div>
-
-          <button onClick={saveItinerary} style={{
-            width: "100%", background: `${C.accent}25`,
-            border: `1.5px solid ${C.accentL}`,
-            borderRadius: 50, padding: "11px 16px",
-            fontSize: 13, fontWeight: "700", color: "#fff",
-            fontFamily: FONT, cursor: "pointer", letterSpacing: "0.01em",
-            marginBottom: itinerary.tips ? 14 : 0,
-          }}>
-            💾 Salva itinerario
-          </button>
 
           {saveMsg && (
             <div style={{
