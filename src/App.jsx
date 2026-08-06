@@ -51,6 +51,75 @@ const PACES = [
   {id:"intenso",   label:"Intenso",    emoji:"🏃", desc:"Massimizza le visite"},
 ];
 
+// ─── CITTÀ PRINCIPALI UK (per classificazione natura/città) ────────
+// Usata per capire se un posto per dormire è vicino a un centro urbano
+// o immerso nella natura, senza bisogno di chiamate esterne.
+const UK_CITIES = [
+  { n: "Londra", la: 51.5074, lo: -0.1278 }, { n: "Birmingham", la: 52.4862, lo: -1.8904 },
+  { n: "Manchester", la: 53.4808, lo: -2.2426 }, { n: "Leeds", la: 53.8008, lo: -1.5491 },
+  { n: "Liverpool", la: 53.4084, lo: -2.9916 }, { n: "Sheffield", la: 53.3811, lo: -1.4701 },
+  { n: "Bristol", la: 51.4545, lo: -2.5879 }, { n: "Newcastle", la: 54.9783, lo: -1.6178 },
+  { n: "Nottingham", la: 52.9548, lo: -1.1581 }, { n: "Leicester", la: 52.6369, lo: -1.1398 },
+  { n: "Coventry", la: 52.4068, lo: -1.5197 }, { n: "Bradford", la: 53.7960, lo: -1.7594 },
+  { n: "Stoke-on-Trent", la: 53.0027, lo: -2.1794 }, { n: "Wolverhampton", la: 52.5862, lo: -2.1288 },
+  { n: "Plymouth", la: 50.3755, lo: -4.1427 }, { n: "Southampton", la: 50.9097, lo: -1.4044 },
+  { n: "Reading", la: 51.4543, lo: -0.9781 }, { n: "Derby", la: 52.9225, lo: -1.4746 },
+  { n: "Portsmouth", la: 50.8198, lo: -1.0880 }, { n: "Brighton", la: 50.8225, lo: -0.1372 },
+  { n: "Luton", la: 51.8787, lo: -0.4200 }, { n: "Preston", la: 53.7632, lo: -2.7031 },
+  { n: "Milton Keynes", la: 52.0406, lo: -0.7594 }, { n: "Northampton", la: 52.2405, lo: -0.9027 },
+  { n: "Norwich", la: 52.6309, lo: 1.2974 }, { n: "Swindon", la: 51.5558, lo: -1.7797 },
+  { n: "Bournemouth", la: 50.7192, lo: -1.8808 }, { n: "Middlesbrough", la: 54.5742, lo: -1.2350 },
+  { n: "Peterborough", la: 52.5695, lo: -0.2405 }, { n: "Cambridge", la: 52.2053, lo: 0.1218 },
+  { n: "Oxford", la: 51.7520, lo: -1.2577 }, { n: "York", la: 53.9600, lo: -1.0873 },
+  { n: "Exeter", la: 50.7184, lo: -3.5339 }, { n: "Gloucester", la: 51.8642, lo: -2.2380 },
+  { n: "Ipswich", la: 52.0567, lo: 1.1482 }, { n: "Blackpool", la: 53.8175, lo: -3.0357 },
+  { n: "Lincoln", la: 53.2307, lo: -0.5406 }, { n: "Carlisle", la: 54.8925, lo: -2.9329 },
+  { n: "Chester", la: 53.1934, lo: -2.8931 }, { n: "Canterbury", la: 51.2802, lo: 1.0789 },
+  { n: "Bath", la: 51.3811, lo: -2.3590 }, { n: "Durham", la: 54.7761, lo: -1.5733 },
+  { n: "Lancaster", la: 54.0466, lo: -2.8007 }, { n: "Hull", la: 53.7457, lo: -0.3367 },
+  { n: "Sunderland", la: 54.9069, lo: -1.3838 }, { n: "Wakefield", la: 53.6833, lo: -1.4977 },
+  { n: "Doncaster", la: 53.5228, lo: -1.1288 }, { n: "Rotherham", la: 53.4302, lo: -1.3567 },
+  { n: "Huddersfield", la: 53.6458, lo: -1.7850 }, { n: "Bolton", la: 53.5769, lo: -2.4282 },
+  { n: "Stockport", la: 53.4106, lo: -2.1575 }, { n: "Warrington", la: 53.3900, lo: -2.5970 },
+  { n: "Blackburn", la: 53.7486, lo: -2.4823 }, { n: "Colchester", la: 51.8959, lo: 0.8919 },
+  { n: "Watford", la: 51.6565, lo: -0.3903 }, { n: "Slough", la: 51.5105, lo: -0.5950 },
+  { n: "Basingstoke", la: 51.2668, lo: -1.0876 }, { n: "Salisbury", la: 51.0688, lo: -1.7944 },
+  { n: "Truro", la: 50.2632, lo: -5.0510 }, { n: "Torquay", la: 50.4619, lo: -3.5253 },
+  { n: "Scarborough", la: 54.2833, lo: -0.4000 }, { n: "Harrogate", la: 53.9919, lo: -1.5378 },
+  { n: "Shrewsbury", la: 52.7069, lo: -2.7530 }, { n: "Worcester", la: 52.1936, lo: -2.2216 },
+  { n: "Chelmsford", la: 51.7356, lo: 0.4685 }, { n: "Kendal", la: 54.3277, lo: -2.7466 },
+  // Scozia
+  { n: "Edimburgo", la: 55.9533, lo: -3.1883 }, { n: "Glasgow", la: 55.8642, lo: -4.2518 },
+  { n: "Aberdeen", la: 57.1497, lo: -2.0943 }, { n: "Dundee", la: 56.4620, lo: -2.9707 },
+  { n: "Inverness", la: 57.4778, lo: -4.2247 }, { n: "Perth", la: 56.3959, lo: -3.4370 },
+  { n: "Stirling", la: 56.1165, lo: -3.9369 }, { n: "Dunfermline", la: 56.0719, lo: -3.4520 },
+  { n: "Ayr", la: 55.4586, lo: -4.6294 }, { n: "Falkirk", la: 56.0019, lo: -3.7839 },
+  { n: "Paisley", la: 55.8456, lo: -4.4239 }, { n: "Livingston", la: 55.8833, lo: -3.5225 },
+  { n: "Hamilton", la: 55.7772, lo: -4.0397 }, { n: "Kirkcaldy", la: 56.1165, lo: -3.1590 },
+  { n: "Greenock", la: 55.9517, lo: -4.7658 }, { n: "Kilmarnock", la: 55.6111, lo: -4.4956 },
+  { n: "Elgin", la: 57.6486, lo: -3.3161 }, { n: "Fort William", la: 56.8198, lo: -5.1052 },
+  { n: "Oban", la: 56.4152, lo: -5.4719 }, { n: "Dumfries", la: 55.0700, lo: -3.6050 },
+];
+
+// Distanza in km tra due coordinate (formula haversine)
+function haversineKm(la1, lo1, la2, lo2) {
+  const R = 6371;
+  const dLa = (la2 - la1) * Math.PI / 180;
+  const dLo = (lo2 - lo1) * Math.PI / 180;
+  const a = Math.sin(dLa/2)**2 + Math.cos(la1*Math.PI/180) * Math.cos(la2*Math.PI/180) * Math.sin(dLo/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// Distanza dal centro urbano più vicino (usata per capire se un posto è "città" o "natura")
+function nearestCityKm(la, lo) {
+  let min = Infinity;
+  for (const c of UK_CITIES) {
+    const d = haversineKm(la, lo, c.la, c.lo);
+    if (d < min) min = d;
+  }
+  return min;
+}
+
 // ─── LOCAL STORAGE ────────────────────────────────────────────────
 const LS_KEY = "guidame_v2";
 
@@ -656,7 +725,7 @@ function TravelSegment({ travel }) {
 }
 
 // ─── WELCOME ──────────────────────────────────────────────────────
-function WelcomeScreen({ onNext, onOpenMyTrips, onRoadTrip }) {
+function WelcomeScreen({ onNext, onOpenMyTrips, onRoadTrip, onSleep }) {
   const inputRef = useRef(null);
   const go = useCallback(() => {
     const v = inputRef.current?.value?.trim();
@@ -720,6 +789,17 @@ function WelcomeScreen({ onNext, onOpenMyTrips, onRoadTrip }) {
       }}>
         <span>🚗</span>
         <span>Voglio fare un viaggio on the road</span>
+      </button>
+      <button onClick={onSleep} style={{
+        marginTop: 10, width: "100%", background: "transparent",
+        border: `1.5px solid ${C.navy}30`, borderRadius: 50, padding: "14px 20px",
+        fontSize: 14, fontWeight: "600", fontFamily: FONT,
+        cursor: "pointer", color: C.navy, letterSpacing: "0.01em",
+        display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+        WebkitTapHighlightColor: "transparent",
+      }}>
+        <span>🏕️</span>
+        <span>Dove dormire stanotte</span>
       </button>
     </div>
     <BottomNav active="home" onHome={() => {}} onMyTrips={onOpenMyTrips} />
@@ -1424,6 +1504,301 @@ REGOLE TASSATIVE:
   );
 }
 
+// ─── DORMIRE ──────────────────────────────────────────────────────
+function SleepScreen({ onBack }) {
+  const [phase,   setPhase]   = useState("input"); // input | geocoding | prefs | loading | results
+  const [place,   setPlace]   = useState("");
+  const [geo,     setGeo]     = useState(null);     // { lat, lon, displayName }
+  const [pref,    setPref]    = useState(null);     // "natura" | "citta"
+  const [results, setResults] = useState([]);
+  const [error,   setError]   = useState("");
+
+  const geocode = async () => {
+    if (!place.trim()) return;
+    setError(""); setPhase("geocoding");
+    try {
+      const r = await fetch(`/api/geocode?q=${encodeURIComponent(place.trim())}`);
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Errore");
+      setGeo({ lat: d.lat, lon: d.lon, displayName: d.displayName });
+      setPhase("prefs");
+    } catch {
+      setError("Località non trovata. Il database copre solo Inghilterra e Scozia.");
+      setPhase("input");
+    }
+  };
+
+  const chooseAndSearch = async (chosenPref) => {
+    setPref(chosenPref);
+    setPhase("loading");
+    try {
+      const res = await fetch("/data/sleep-spots.json");
+      const all = await res.json();
+
+      const withDist = all.map(s => ({ ...s, dist: haversineKm(geo.lat, geo.lon, s.la, s.lo) }));
+
+      // Espande il raggio di ricerca finché non trova abbastanza candidati
+      const radii = [20, 40, 75, 125, 200, 350];
+      let candidates = [];
+      for (const rad of radii) {
+        candidates = withDist.filter(s => s.dist <= rad);
+        if (candidates.length >= 12) break;
+      }
+      if (candidates.length === 0) {
+        candidates = [...withDist].sort((a, b) => a.dist - b.dist).slice(0, 10);
+      }
+
+      // Classifica natura/città + punteggio qualità (metadati disponibili)
+      const genericNames = ["campeggio", "area sosta camper/caravan", "basic site"];
+      const scored = candidates.map(s => {
+        const isCitta = nearestCityKm(s.la, s.lo) <= 6;
+        let quality = 0;
+        if (!genericNames.includes(s.n.toLowerCase())) quality += 2;
+        if (s.w) quality += 1;
+        if (s.te) quality += 1;
+        if (s.e === true) quality += 1;
+        if (s.f) quality += 1;
+        return { ...s, isCitta, quality };
+      });
+
+      // Filtra per preferenza, con fallback se ci sono troppo pochi risultati
+      let matched = scored.filter(s => chosenPref === "natura" ? !s.isCitta : s.isCitta);
+      if (matched.length < 5) matched = scored;
+
+      matched.forEach(s => { s.score = s.quality - s.dist / 40; });
+      matched.sort((a, b) => b.score - a.score);
+
+      setResults(matched.slice(0, 10));
+      setPhase("results");
+    } catch {
+      setError("Errore nel caricamento dei posti. Riprova.");
+      setPhase("prefs");
+    }
+  };
+
+  const reset = () => {
+    setPhase("input"); setPlace(""); setGeo(null); setPref(null); setResults([]); setError("");
+  };
+
+  // ── GEOCODING / LOADING ──────────────────────────────────────────
+  if (phase === "geocoding" || phase === "loading") return (
+    <div style={{ ...rootStyle, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", padding: "24px" }}>
+      <Spinner />
+      <div style={{ fontSize: 40, margin: "22px 0 12px" }}>🏕️</div>
+      <div style={{ color: C.navy, fontSize: 16, fontWeight: "700", textAlign: "center", lineHeight: 1.7, fontFamily: FONT_HEADING }}>
+        {phase === "geocoding" ? "Sto localizzando il posto…" : "Cerco i posti migliori…"}
+      </div>
+    </div>
+  );
+
+  // ── PREFS (natura / città) ───────────────────────────────────────
+  if (phase === "prefs" && geo) return (
+    <div style={{ ...rootStyle, padding: "0", minHeight: "100vh" }}>
+      <Header label="Dove dormire" />
+      <div style={{ padding: "20px 20px 40px" }}>
+        <div style={{ textAlign: "center", marginBottom: 32 }}>
+          <div style={{
+            width: 72, height: 72, borderRadius: "50%",
+            background: C.navy, margin: "8px auto 16px",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 32, boxShadow: `0 8px 24px ${C.navy}40`,
+          }}>🏕️</div>
+          <div style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>
+            📍 {geo.displayName}
+          </div>
+          <h2 style={{ fontSize: 20, fontWeight: "800", margin: "0 0 8px", color: C.navy, fontFamily: FONT_HEADING }}>
+            Che tipo di posto preferisci?
+          </h2>
+        </div>
+
+        <button onClick={() => chooseAndSearch("natura")} style={{
+          width: "100%", background: C.surface, border: `2px solid ${C.border}`,
+          borderRadius: 16, padding: "20px", marginBottom: 14, cursor: "pointer",
+          display: "flex", alignItems: "center", gap: 14, textAlign: "left",
+          boxShadow: "0 2px 8px rgba(28,43,74,0.06)", fontFamily: FONT,
+        }}>
+          <span style={{ fontSize: 32 }}>🌲</span>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: "700", color: C.navy }}>Nella natura</div>
+            <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>Lontano dai centri urbani, tra boschi, laghi e coste</div>
+          </div>
+        </button>
+
+        <button onClick={() => chooseAndSearch("citta")} style={{
+          width: "100%", background: C.surface, border: `2px solid ${C.border}`,
+          borderRadius: 16, padding: "20px", marginBottom: 14, cursor: "pointer",
+          display: "flex", alignItems: "center", gap: 14, textAlign: "left",
+          boxShadow: "0 2px 8px rgba(28,43,74,0.06)", fontFamily: FONT,
+        }}>
+          <span style={{ fontSize: 32 }}>🏙️</span>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: "700", color: C.navy }}>Vicino alla città</div>
+            <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>Comodo per visitare, servizi a portata di mano</div>
+          </div>
+        </button>
+
+        {error && (
+          <div style={{ color: C.red, fontSize: 13, marginTop: 10, padding: "10px 14px", background: "#FEF2F2", borderRadius: 10, border: "1px solid #FCA5A5" }}>
+            {error}
+          </div>
+        )}
+
+        <OutlineBtn onClick={onBack}>← Torna alla home</OutlineBtn>
+      </div>
+    </div>
+  );
+
+  // ── RESULTS ───────────────────────────────────────────────────────
+  if (phase === "results") return (
+    <div style={rootStyle}>
+      <Header label={`Dove dormire · ${pref === "natura" ? "🌲 Natura" : "🏙️ Città"}`} />
+      <div style={{ padding: "0 20px 40px" }}>
+        <div style={{
+          background: C.navy, borderRadius: 20, padding: "18px 20px",
+          margin: "20px 0", color: "#fff",
+        }}>
+          <div style={{ fontSize: 12, opacity: 0.65, marginBottom: 4, letterSpacing: "0.05em", textTransform: "uppercase", fontWeight: "600" }}>
+            📍 Vicino a
+          </div>
+          <div style={{ fontSize: 15, fontWeight: "700", lineHeight: 1.4 }}>
+            {geo?.displayName}
+          </div>
+        </div>
+
+        {results.length === 0 && (
+          <div style={{ textAlign: "center", padding: "48px 20px", color: C.muted }}>
+            <div style={{ fontSize: 40, marginBottom: 16 }}>😕</div>
+            Nessun posto trovato nelle vicinanze.
+          </div>
+        )}
+
+        {results.map((s, i) => (
+          <div key={i} style={{
+            background: C.surface, border: `1.5px solid ${C.border}`,
+            borderRadius: 16, padding: "16px", marginBottom: 12,
+            boxShadow: "0 2px 8px rgba(28,43,74,0.06)",
+          }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 8, gap: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 22 }}>{s.t === "campeggio" ? "🏕️" : "🚐"}</span>
+                <div style={{ fontFamily: FONT_HEADING, fontSize: 16, fontWeight: "700", color: C.navy }}>
+                  {s.n}
+                </div>
+              </div>
+              <span style={{ fontSize: 11, color: C.muted, fontWeight: "600", whiteSpace: "nowrap", flexShrink: 0 }}>
+                ~{Math.round(s.dist)} km
+              </span>
+            </div>
+
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+              <span style={{
+                background: s.isCitta ? "#DBEAFE" : "#DCFCE7",
+                color: s.isCitta ? "#1E40AF" : "#166534",
+                borderRadius: 50, padding: "3px 10px", fontSize: 11, fontWeight: "700",
+              }}>
+                {s.isCitta ? "🏙️ Città" : "🌲 Natura"}
+              </span>
+              {s.f && (
+                <span style={{ background: C.sky, color: C.navy, borderRadius: 50, padding: "3px 10px", fontSize: 11, fontWeight: "600" }}>
+                  💷 {s.f === "yes" ? "A pagamento" : s.f}
+                </span>
+              )}
+              {s.e === true && (
+                <span style={{ background: C.sky, color: C.navy, borderRadius: 50, padding: "3px 10px", fontSize: 11, fontWeight: "600" }}>
+                  🔌 Elettricità
+                </span>
+              )}
+              {s.h && (
+                <span style={{ background: C.sky, color: C.navy, borderRadius: 50, padding: "3px 10px", fontSize: 11, fontWeight: "600" }}>
+                  🗓️ {s.h}
+                </span>
+              )}
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${s.la},${s.lo}`}
+                target="_blank" rel="noopener noreferrer"
+                style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, color: "#1a73e8", fontWeight: "600", textDecoration: "none" }}
+              >
+                🗺️ Vedi su Maps
+              </a>
+              {s.te && (
+                <a href={`tel:${s.te.replace(/\s+/g, "")}`} style={{ fontSize: 12, color: C.muted, fontWeight: "600", textDecoration: "none" }}>
+                  📞 {s.te}
+                </a>
+              )}
+              {s.w && (
+                <a href={s.w} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: C.muted, fontWeight: "600", textDecoration: "none" }}>
+                  🔗 Sito web
+                </a>
+              )}
+            </div>
+          </div>
+        ))}
+
+        <button onClick={reset} style={{
+          width: "100%", background: C.accent, color: "#fff", border: "none",
+          borderRadius: 50, padding: "16px 20px", fontSize: 15, fontWeight: "700",
+          fontFamily: FONT, cursor: "pointer", marginTop: 8, marginBottom: 10,
+        }}>
+          🔍 Nuova ricerca
+        </button>
+        <OutlineBtn onClick={onBack}>← Torna alla home</OutlineBtn>
+      </div>
+    </div>
+  );
+
+  // ── INPUT (default) ──────────────────────────────────────────────
+  return (
+    <div style={{ ...rootStyle, padding: "0", minHeight: "100vh" }}>
+      <Header label="Dove dormire" />
+      <div style={{ padding: "20px 20px 40px" }}>
+        <div style={{ textAlign: "center", marginBottom: 28 }}>
+          <div style={{
+            width: 72, height: 72, borderRadius: "50%",
+            background: C.navy, margin: "8px auto 16px",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 32, boxShadow: `0 8px 24px ${C.navy}40`,
+          }}>🏕️</div>
+          <h2 style={{ fontSize: 22, fontWeight: "800", margin: "0 0 8px", color: C.navy, fontFamily: FONT_HEADING }}>
+            Dove vuoi dormire stanotte?
+          </h2>
+          <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.55, margin: 0 }}>
+            Trova campeggi e aree sosta camper vicino a te, in Inghilterra e Scozia.
+          </p>
+        </div>
+
+        <label style={{ fontSize: 12, color: C.navy, fontWeight: "700", letterSpacing: "0.05em", textTransform: "uppercase", display: "block", marginBottom: 8 }}>
+          Località
+        </label>
+        <input
+          type="text" value={place} onChange={e => setPlace(e.target.value)}
+          placeholder="es. Edimburgo, York, Loch Lomond…"
+          onKeyDown={e => e.key === "Enter" && geocode()}
+          style={{
+            width: "100%", background: C.surface, border: `2px solid ${C.border}`,
+            borderRadius: 14, padding: "15px 18px", color: C.navy, fontSize: 16,
+            fontFamily: FONT, outline: "none", boxSizing: "border-box", marginBottom: 20,
+            boxShadow: "0 2px 8px rgba(28,43,74,0.06)",
+          }}
+        />
+
+        {error && (
+          <div style={{ color: C.red, fontSize: 13, marginBottom: 14, padding: "10px 14px", background: "#FEF2F2", borderRadius: 10, border: "1px solid #FCA5A5" }}>
+            {error}
+          </div>
+        )}
+
+        <AccentBtn onClick={geocode} disabled={!place.trim()}>
+          Cerca →
+        </AccentBtn>
+        <OutlineBtn onClick={onBack}>← Torna alla home</OutlineBtn>
+      </div>
+    </div>
+  );
+}
+
 // ─── MAIN APP ─────────────────────────────────────────────────────
 export default function App() {
   const [screen,       setScreen]       = useState("welcome");
@@ -1716,11 +2091,16 @@ Restituisci SOLO questo JSON:
       onNext={c => { setCity(c); setScreen("startpoint"); }}
       onOpenMyTrips={() => setScreen("mytrips")}
       onRoadTrip={() => setScreen("roadtrip")}
+      onSleep={() => setScreen("sleep")}
     />
   );
 
   if (screen === "roadtrip") return (
     <RoadTripScreen onBack={() => setScreen("welcome")} onSaveTrip={saveTrip} />
+  );
+
+  if (screen === "sleep") return (
+    <SleepScreen onBack={() => setScreen("welcome")} />
   );
 
   if (screen === "mytrips") return (
