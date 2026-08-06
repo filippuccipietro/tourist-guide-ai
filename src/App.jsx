@@ -724,6 +724,76 @@ function TravelSegment({ travel }) {
   );
 }
 
+// ─── CAROUSEL FUNZIONI HOME ─────────────────────────────────────────
+function ImageCarousel({ onExplore, onRoadTrip, onSleep }) {
+  const trackRef = useRef(null);
+  const [active, setActive] = useState(0);
+
+  const slides = [
+    { img: "/images/carousel-explore.jpg",  emoji: "🧭", title: "Esplora una città", sub: "Itinerari su misura",     onClick: onExplore },
+    { img: "/images/carousel-roadtrip.jpg", emoji: "🚗", title: "Road trip",         sub: "Pianifica il tuo viaggio", onClick: onRoadTrip },
+    { img: "/images/carousel-sleep.jpg",    emoji: "🏕️", title: "Dove dormire",      sub: "Trova il posto giusto",    onClick: onSleep },
+  ];
+
+  const handleScroll = () => {
+    const el = trackRef.current;
+    if (!el || !el.firstChild) return;
+    const slideW = el.firstChild.offsetWidth + 12; // card + gap
+    const idx = Math.round(el.scrollLeft / slideW);
+    setActive(Math.min(slides.length - 1, Math.max(0, idx)));
+  };
+
+  return (
+    <div style={{ marginBottom: 26 }}>
+      <div
+        ref={trackRef}
+        onScroll={handleScroll}
+        className="carousel-track"
+        style={{
+          display: "flex", gap: 12, overflowX: "auto",
+          scrollSnapType: "x mandatory", margin: "0 -20px", padding: "0 20px 4px",
+        }}
+      >
+        {slides.map((s, i) => (
+          <button
+            key={i}
+            onClick={s.onClick}
+            style={{
+              flex: "0 0 78%", scrollSnapAlign: "center",
+              position: "relative", border: "none", padding: 0,
+              borderRadius: 22, overflow: "hidden", cursor: "pointer",
+              aspectRatio: "4 / 3", background: C.border,
+              boxShadow: "0 6px 18px rgba(28,43,74,0.14)",
+              WebkitTapHighlightColor: "transparent",
+            }}
+          >
+            <img src={s.img} alt={s.title} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+            <div style={{
+              position: "absolute", inset: 0,
+              background: "linear-gradient(180deg, rgba(0,0,0,0) 45%, rgba(0,0,0,0.62) 100%)",
+            }} />
+            <div style={{ position: "absolute", left: 14, right: 14, bottom: 12, textAlign: "left" }}>
+              <div style={{ fontSize: 13, fontWeight: "800", color: "#fff", fontFamily: FONT_HEADING, marginBottom: 2, display: "flex", alignItems: "center", gap: 6 }}>
+                <span>{s.emoji}</span><span>{s.title}</span>
+              </div>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.85)", fontWeight: "600" }}>{s.sub}</div>
+            </div>
+          </button>
+        ))}
+      </div>
+      <div style={{ display: "flex", justifyContent: "center", gap: 6, marginTop: 10 }}>
+        {slides.map((_, i) => (
+          <div key={i} style={{
+            width: active === i ? 16 : 6, height: 6, borderRadius: 3,
+            background: active === i ? C.accent : C.border,
+            transition: "all 0.25s ease",
+          }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── WELCOME ──────────────────────────────────────────────────────
 function WelcomeScreen({ onNext, onOpenMyTrips, onRoadTrip, onSleep }) {
   const inputRef = useRef(null);
@@ -734,30 +804,34 @@ function WelcomeScreen({ onNext, onOpenMyTrips, onRoadTrip, onSleep }) {
 
   return (
     <>
-    <div style={{ ...rootStyle, display: "flex", flexDirection: "column", justifyContent: "center", padding: "24px 20px 96px", minHeight: "100vh" }}>
-      <div style={{ textAlign: "center", marginBottom: 44 }}>
+    <div style={{ ...rootStyle, display: "flex", flexDirection: "column", padding: "14px 20px 96px", minHeight: "100vh" }}>
+      <div style={{ textAlign: "center", marginBottom: 18 }}>
         <div style={{
-          width: 80, height: 80, borderRadius: "50%",
-          background: C.accent, margin: "0 auto 20px",
+          width: 62, height: 62, borderRadius: "50%",
+          background: C.accent, margin: "0 auto 12px",
           display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: 38, boxShadow: `0 8px 24px ${C.accent}40`,
+          fontSize: 28, boxShadow: `0 8px 24px ${C.accent}40`,
         }}>🧭</div>
         <div style={{
           fontSize: 11, letterSpacing: "0.3em", color: C.accent,
-          fontWeight: "700", textTransform: "uppercase", marginBottom: 10,
+          fontWeight: "700", textTransform: "uppercase", marginBottom: 8,
         }}>
           La tua guida culturale
         </div>
         <h1 style={{
-          fontSize: 38, margin: "0 0 12px", lineHeight: 1.15,
+          fontSize: 34, margin: 0, lineHeight: 1.15,
           fontWeight: "700", color: C.navy, fontFamily: FONT_HEADING,
         }}>
           GuidaMe
         </h1>
-        <p style={{ color: C.muted, fontSize: 14, lineHeight: 1.6, margin: "0 0 6px" }}>
-          Itinerari su misura · Audioguida AI · Navigazione
-        </p>
       </div>
+
+      <ImageCarousel
+        onExplore={() => inputRef.current?.focus()}
+        onRoadTrip={onRoadTrip}
+        onSleep={onSleep}
+      />
+
       <label style={{
         fontSize: 12, color: C.navy, fontWeight: "700",
         letterSpacing: "0.05em", textTransform: "uppercase",
@@ -1841,6 +1915,8 @@ export default function App() {
       input[type=range]{-webkit-appearance:none;appearance:none;height:4px;border-radius:2px;outline:none;cursor:pointer;}
       input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:${C.accent};cursor:pointer;margin-top:-7px;}
       input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:${C.accent};cursor:pointer;border:none;}
+      .carousel-track{scrollbar-width:none;-ms-overflow-style:none;}
+      .carousel-track::-webkit-scrollbar{display:none;}
     `;
     document.head.appendChild(s);
     return () => document.head.removeChild(s);
