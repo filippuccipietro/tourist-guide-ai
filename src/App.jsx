@@ -22,7 +22,7 @@ const C = {
   travelB: "#DFC5A8",
 };
 
-const FONT         = "'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif";
+const FONT         = "'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif";
 const FONT_HEADING = "'Playfair Display', Georgia, serif";
 
 // ─── DATA ─────────────────────────────────────────────────────────
@@ -159,66 +159,120 @@ function fmt(s) {
   return `${m}:${sec.toString().padStart(2, "0")}`;
 }
 
+// Velocità di parlato stimata (caratteri/secondo) usata per calcolare durata e posizione,
+// dato che la Web Speech API non espone currentTime/duration reali come un file audio.
+const TTS_CHARS_PER_SEC = 15;
+
 function useTTS() {
   const [ttsState,     setTtsState]     = useState("idle");
   const [ttsStopId,    setTtsStopId]    = useState(null);
   const [ttsError,     setTtsError]     = useState(null);
   const [lastFailedId, setLastFailedId] = useState(null);
-  const utterRef = useRef(null);
-  // Web Speech API non espone currentTime/duration → stub (la seek bar rimane nascosta)
-  const progress = { current: 0, duration: 0 };
-  const seek = useCallback(() => {}, []);
+  const [progress,     setProgress]     = useState({ current: 0, duration: 0 });
+
+  const fullTextRef = useRef("");   // testo completo dell'audio in corso (serve per il seek)
+  const stopIdRef   = useRef(null);
+  const timerRef    = useRef(null);
+  const pausedRef   = useRef(false);
+  const curRef      = useRef(0);
+
+  const clearTimer = () => {
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+  };
 
   const cancel = useCallback(() => {
+    clearTimer();
     window.speechSynthesis.cancel();
-    utterRef.current = null;
     setTtsState("idle");
     setTtsStopId(null);
+    setProgress({ current: 0, duration: 0 });
+    fullTextRef.current = "";
   }, []);
 
-  const speak = useCallback((text, sid) => {
+  // Avvia (o riavvia da un certo punto) la sintesi vocale.
+  // fullText = testo completo originale (per calcolare la durata totale e permettere il seek)
+  // offsetChars = da quale carattere del testo completo parte "text"
+  const startUtterance = useCallback((text, sid, fullText, offsetChars) => {
+    clearTimer();
     window.speechSynthesis.cancel();
-    utterRef.current = null;
     setTtsError(null);
     setLastFailedId(null);
     setTtsState("loading");
     setTtsStopId(sid);
+    stopIdRef.current = sid;
+    fullTextRef.current = fullText;
+    pausedRef.current = false;
+
+    const estDuration = fullText.length / TTS_CHARS_PER_SEC;
+    curRef.current = offsetChars / TTS_CHARS_PER_SEC;
+    setProgress({ current: curRef.current, duration: estDuration });
 
     const utt = new SpeechSynthesisUtterance(text);
     utt.lang  = "it-IT";
     utt.rate  = 0.92;
     utt.pitch = 1.0;
 
-    // Seleziona voce italiana se disponibile
     const voices  = window.speechSynthesis.getVoices();
     const itVoice = voices.find(v => v.lang.startsWith("it"));
     if (itVoice) utt.voice = itVoice;
 
-    utt.onstart  = () => setTtsState("speaking");
-    utt.onpause  = () => setTtsState("paused");
-    utt.onresume = () => setTtsState("speaking");
-    utt.onend    = () => {
-      utterRef.current = null;
+    utt.onstart = () => {
+      setTtsState("speaking");
+      // Ticker di riserva: fa avanzare il cursore anche sui browser (es. Safari) che non
+      // emettono l'evento onboundary per parola.
+      clearTimer();
+      timerRef.current = setInterval(() => {
+        if (pausedRef.current) return;
+        curRef.current = Math.min(estDuration, curRef.current + 0.2);
+        setProgress({ current: curRef.current, duration: estDuration });
+      }, 200);
+    };
+    utt.onpause  = () => { pausedRef.current = true;  setTtsState("paused"); };
+    utt.onresume = () => { pausedRef.current = false; setTtsState("speaking"); };
+    utt.onboundary = (e) => {
+      if (e.charIndex == null) return;
+      curRef.current = Math.min(estDuration, (offsetChars + e.charIndex) / TTS_CHARS_PER_SEC);
+      setProgress({ current: curRef.current, duration: estDuration });
+    };
+    utt.onend = () => {
+      clearTimer();
       setTtsState("idle");
       setTtsStopId(null);
+      setProgress({ current: 0, duration: 0 });
+      fullTextRef.current = "";
     };
     utt.onerror = (e) => {
+      clearTimer();
       if (e.error === "interrupted" || e.error === "canceled") return;
-      utterRef.current = null;
       setTtsState("idle");
       setTtsStopId(null);
       setTtsError("Audio non disponibile. Riprova.");
       setLastFailedId(sid);
     };
 
-    utterRef.current = utt;
     window.speechSynthesis.speak(utt);
   }, []);
+
+  const speak = useCallback((text, sid) => {
+    startUtterance(text, sid, text, 0);
+  }, [startUtterance]);
+
+  // "Seek": la Web Speech API non permette di saltare a metà di un audio in corso, quindi
+  // ricominciamo la sintesi dal testo a partire dal punto scelto (arrotondato a inizio parola).
+  const seek = useCallback((targetSeconds) => {
+    const fullText = fullTextRef.current;
+    if (!fullText) return;
+    let targetChar = Math.max(0, Math.min(fullText.length - 1, Math.round(targetSeconds * TTS_CHARS_PER_SEC)));
+    while (targetChar > 0 && fullText[targetChar - 1] !== " " && fullText[targetChar - 1] !== "\n") targetChar--;
+    const remaining = fullText.slice(targetChar);
+    if (!remaining.trim()) return;
+    startUtterance(remaining, stopIdRef.current, fullText, targetChar);
+  }, [startUtterance]);
 
   const pause  = useCallback(() => { window.speechSynthesis.pause();  }, []);
   const resume = useCallback(() => { window.speechSynthesis.resume(); }, []);
 
-  useEffect(() => () => { window.speechSynthesis.cancel(); }, []);
+  useEffect(() => () => { clearTimer(); window.speechSynthesis.cancel(); }, []);
 
   return { ttsState, ttsStopId, ttsError, lastFailedId, speak, pause, resume, stop: cancel, progress, seek };
 }
@@ -233,6 +287,25 @@ function TTSPlayer({ text, stopId, label, tts }) {
   const active   = mine && ttsState !== "idle";
   const hasSeek  = active && !loading && progress.duration > 0;
   const hasFailed = !active && lastFailedId === stopId && ttsError;
+
+  // Durante il trascinamento del cursore mostriamo subito la nuova posizione (dragValue),
+  // ma il riavvio effettivo dell'audio (seek reale) parte solo dopo una breve pausa:
+  // altrimenti ogni micro-movimento del dito riavvierebbe la sintesi vocale.
+  const [dragValue, setDragValue] = useState(null);
+  const seekTimer = useRef(null);
+  useEffect(() => () => { if (seekTimer.current) clearTimeout(seekTimer.current); }, []);
+  useEffect(() => { if (!mine) setDragValue(null); }, [mine]);
+
+  const displayCurrent = dragValue != null ? dragValue : progress.current;
+
+  const onSeekDrag = (val) => {
+    setDragValue(val);
+    if (seekTimer.current) clearTimeout(seekTimer.current);
+    seekTimer.current = setTimeout(() => {
+      seek(val);
+      setDragValue(null);
+    }, 350);
+  };
 
   const onTap = () => {
     if (loading)  return;
@@ -293,14 +366,14 @@ function TTSPlayer({ text, stopId, label, tts }) {
           <div style={{ padding: "0 14px 12px" }} onClick={e => e.stopPropagation()}>
             <input
               type="range" min={0} max={progress.duration} step={0.5}
-              value={progress.current}
-              onChange={e => seek(parseFloat(e.target.value))}
+              value={displayCurrent}
+              onChange={e => onSeekDrag(parseFloat(e.target.value))}
               onMouseDown={e => e.stopPropagation()}
               onTouchStart={e => e.stopPropagation()}
               style={{
                 width: "100%", accentColor: C.accent, cursor: "pointer",
                 height: 4, WebkitAppearance: "none", appearance: "none",
-                background: `linear-gradient(to right, ${C.accent} ${(progress.current/progress.duration)*100}%, ${C.skyD} 0%)`,
+                background: `linear-gradient(to right, ${C.accent} ${(displayCurrent/progress.duration)*100}%, ${C.skyD} 0%)`,
                 borderRadius: 2, outline: "none",
               }}
             />
@@ -308,8 +381,8 @@ function TTSPlayer({ text, stopId, label, tts }) {
               display: "flex", justifyContent: "space-between",
               fontSize: 11, color: C.accentD, marginTop: 4, fontWeight: "600",
             }}>
-              <span>{fmt(progress.current)}</span>
-              <span>−{fmt(Math.max(0, progress.duration - progress.current))}</span>
+              <span>{fmt(displayCurrent)}</span>
+              <span>−{fmt(Math.max(0, progress.duration - displayCurrent))}</span>
             </div>
           </div>
         )}
@@ -406,6 +479,57 @@ function Spinner({ small }) {
       borderTop: `${small ? 2 : 3}px solid ${C.accent}`,
       borderRadius: "50%", animation: "spin 0.8s linear infinite", flexShrink: 0,
     }}/>
+  );
+}
+
+// ─── LOADER "AVVENTURA" (usato in tutte le schermate di attesa) ────
+// Racconta una piccola storia in 3 scene mentre l'utente aspetta la risposta AI.
+const LOADER_STAGES = [
+  { icon: "🐕", title: "Sto rincorrendo il cane…",     sub: "È scappato con le mie note di viaggio." },
+  { icon: "🏃", title: "Sto radunando l'equipaggio…",   sub: "Quasi tutti a bordo, manca solo il cane." },
+  { icon: "🚐", title: "Ci siamo quasi…",               sub: "Ultimi preparativi, si parte a momenti." },
+];
+
+function AdventureLoader() {
+  const [stage, setStage] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setStage(s => (s + 1) % LOADER_STAGES.length), 1900);
+    return () => clearInterval(id);
+  }, []);
+  const s = LOADER_STAGES[stage];
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+      <div key={`icon-${stage}`} style={{
+        width: 84, height: 84, borderRadius: "50%",
+        background: C.navy, display: "flex", alignItems: "center", justifyContent: "center",
+        boxShadow: `0 8px 24px ${C.navy}40`, animation: "loaderPop 0.4s ease",
+      }}>
+        <span style={{ fontSize: 40, display: "inline-block", animation: "loaderBounce 0.6s ease-in-out infinite" }}>
+          {s.icon}
+        </span>
+      </div>
+      <div key={`t-${stage}`} style={{
+        color: C.navy, fontSize: 16, fontWeight: "700", textAlign: "center", lineHeight: 1.6,
+        fontFamily: FONT_HEADING, marginTop: 18, animation: "loaderFadeIn 0.35s ease",
+      }}>
+        {s.title}
+      </div>
+      <div key={`s-${stage}`} style={{
+        color: C.muted, fontSize: 14, textAlign: "center", lineHeight: 1.6, marginTop: 6,
+        animation: "loaderFadeIn 0.35s ease",
+      }}>
+        {s.sub}
+      </div>
+      <div style={{ display: "flex", gap: 6, marginTop: 20 }}>
+        {LOADER_STAGES.map((_, i) => (
+          <div key={i} style={{
+            width: stage === i ? 16 : 6, height: 6, borderRadius: 3,
+            background: stage === i ? C.accent : C.border,
+            transition: "all 0.25s ease",
+          }}/>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -804,8 +928,8 @@ function WelcomeScreen({ onNext, onOpenMyTrips, onRoadTrip, onSleep }) {
 
   return (
     <>
-    <div style={{ ...rootStyle, display: "flex", flexDirection: "column", padding: "14px 20px 96px", minHeight: "100vh" }}>
-      <div style={{ textAlign: "center", marginBottom: 18 }}>
+    <div style={{ ...rootStyle, display: "flex", flexDirection: "column", padding: "28px 20px 96px", minHeight: "100vh" }}>
+      <div style={{ textAlign: "center", marginBottom: 24 }}>
         <div style={{
           width: 62, height: 62, borderRadius: "50%",
           background: C.accent, margin: "0 auto 12px",
@@ -853,28 +977,6 @@ function WelcomeScreen({ onNext, onOpenMyTrips, onRoadTrip, onSleep }) {
         }}
       />
       <AccentBtn onClick={go}>Inizia →</AccentBtn>
-      <button onClick={onRoadTrip} style={{
-        marginTop: 12, width: "100%", background: "transparent",
-        border: `1.5px solid ${C.navy}30`, borderRadius: 50, padding: "14px 20px",
-        fontSize: 14, fontWeight: "600", fontFamily: FONT,
-        cursor: "pointer", color: C.navy, letterSpacing: "0.01em",
-        display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-        WebkitTapHighlightColor: "transparent",
-      }}>
-        <span>🚗</span>
-        <span>Voglio fare un viaggio on the road</span>
-      </button>
-      <button onClick={onSleep} style={{
-        marginTop: 10, width: "100%", background: "transparent",
-        border: `1.5px solid ${C.navy}30`, borderRadius: 50, padding: "14px 20px",
-        fontSize: 14, fontWeight: "600", fontFamily: FONT,
-        cursor: "pointer", color: C.navy, letterSpacing: "0.01em",
-        display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-        WebkitTapHighlightColor: "transparent",
-      }}>
-        <span>🏕️</span>
-        <span>Dove dormire stanotte</span>
-      </button>
     </div>
     <BottomNav active="home" onHome={() => {}} onMyTrips={onOpenMyTrips} />
     </>
@@ -1344,15 +1446,7 @@ REGOLE TASSATIVE:
 
   if (phase === "generating") return (
     <div style={{ ...rootStyle, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", padding: "24px" }}>
-      <Spinner />
-      <div style={{ fontSize: 40, margin: "22px 0 12px" }}>🚗</div>
-      <div style={{ color: C.navy, fontSize: 16, fontWeight: "700", textAlign: "center", lineHeight: 1.7, fontFamily: FONT_HEADING }}>
-        Sto pianificando il percorso…
-      </div>
-      <div style={{ color: C.muted, fontSize: 14, textAlign: "center", lineHeight: 1.7, marginTop: 6 }}>
-        Cerco le attrazioni lungo la strada.<br/>
-        <span style={{ color: C.accent, fontWeight: "600" }}>Un momento.</span>
-      </div>
+      <AdventureLoader />
     </div>
   );
 
@@ -1469,15 +1563,15 @@ REGOLE TASSATIVE:
                   </div>
                 ) : details[h.id ?? h.name]?.text ? (
                   <>
-                    <div style={{ fontSize: 14, color: C.navy, lineHeight: 1.75, marginBottom: 14, whiteSpace: "pre-wrap" }}>
-                      {details[h.id ?? h.name].text}
-                    </div>
                     <TTSPlayer
                       text={details[h.id ?? h.name].text}
                       stopId={`rt-${h.id ?? h.name}`}
                       label={h.name}
                       tts={tts}
                     />
+                    <div style={{ fontSize: 14, color: C.navy, lineHeight: 1.75, marginTop: 14, whiteSpace: "pre-wrap" }}>
+                      {details[h.id ?? h.name].text}
+                    </div>
                   </>
                 ) : null}
               </div>
@@ -1657,11 +1751,7 @@ function SleepScreen({ onBack }) {
   // ── GEOCODING / LOADING ──────────────────────────────────────────
   if (phase === "geocoding" || phase === "loading") return (
     <div style={{ ...rootStyle, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", padding: "24px" }}>
-      <Spinner />
-      <div style={{ fontSize: 40, margin: "22px 0 12px" }}>🏕️</div>
-      <div style={{ color: C.navy, fontSize: 16, fontWeight: "700", textAlign: "center", lineHeight: 1.7, fontFamily: FONT_HEADING }}>
-        {phase === "geocoding" ? "Sto localizzando il posto…" : "Cerco i posti migliori…"}
-      </div>
+      <AdventureLoader />
     </div>
   );
 
@@ -1902,6 +1992,9 @@ export default function App() {
     const s = document.createElement("style");
     s.textContent = `
       @keyframes spin{to{transform:rotate(360deg)}}
+      @keyframes loaderPop{from{opacity:0;transform:scale(0.7)}to{opacity:1;transform:scale(1)}}
+      @keyframes loaderFadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+      @keyframes loaderBounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
       @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
       @keyframes wave1{0%,100%{height:4px}50%{height:18px}}
       @keyframes wave2{0%,100%{height:8px}50%{height:22px}}
@@ -2374,15 +2467,7 @@ Restituisci SOLO questo JSON:
 
   if (screen === "generating") return (
     <div style={{ ...rootStyle, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", padding: "24px" }}>
-      <Spinner/>
-      <div style={{ fontSize: 40, margin: "22px 0 12px" }}>🗺️</div>
-      <div style={{ color: C.navy, fontSize: 16, fontWeight: "700", textAlign: "center", lineHeight: 1.7, fontFamily: FONT_HEADING }}>
-        Sto studiando {city}…
-      </div>
-      <div style={{ color: C.muted, fontSize: 14, textAlign: "center", lineHeight: 1.7, marginTop: 6 }}>
-        Preparo il tuo itinerario su misura.<br/>
-        <span style={{ color: C.accent, fontWeight: "600" }}>Un momento.</span>
-      </div>
+      <AdventureLoader />
     </div>
   );
 
